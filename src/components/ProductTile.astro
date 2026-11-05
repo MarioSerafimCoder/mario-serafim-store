@@ -26,7 +26,10 @@ const { category, images: [cover], name, priceCents, status, summary } = product
       <p class="eyebrow">{category}</p>
       <h3 class="tile-title">{name}</h3>
       <p class="text-copy">{summary}</p>
-      <p class:list={['tile-price', status === 'coming_soon' && 'status-label']}>{status === 'coming_soon' ? 'Em breve' : formatPrice(priceCents)}</p>
+      <div class="tile-footer">
+        <span class:list={['tile-price', status === 'coming_soon' && 'status-label']}>{status === 'coming_soon' ? 'Em breve' : formatPrice(priceCents)}</span>
+        <span class="tile-cta">Ver produto <span aria-hidden="true">↗</span></span>
+      </div>
     </div>
   </a>
 </article>

@@ -39,27 +39,20 @@ const faq = headings.find(({ text }) => text.toLocaleLowerCase('pt-BR') === 'per
   <article>
     <div class="product-layout">
       <header class="product-intro">
-        <p class="eyebrow">Produto digital / {sku}</p>
+        <p class="eyebrow">Produto digital · {category}</p>
         <h1 class="display">{name}</h1>
         <p class="lede">{summary}</p>
-        {status === 'coming_soon'
-          ? <p class="eyebrow status-label">Em breve</p>
-          : <p class="product-price">{formatPrice(priceCents)}</p>}
-        <div class="purchase-state">
-          <span class="signal" aria-hidden="true"></span>
-          <p>Compra indisponível nesta etapa.</p>
+        <div class="purchase-panel">
+          {status === 'coming_soon'
+            ? <p class="eyebrow status-label">Em breve</p>
+            : <p class="product-price">{formatPrice(priceCents)}</p>}
+          <p class="purchase-state"><span class="signal" aria-hidden="true"></span>Compra indisponível nesta etapa.</p>
         </div>
-        {faq && <a class="text-link tap" href={`#${faq.slug}`}>Perguntas frequentes</a>}
       </header>
 
       <ProductGallery images={images} />
 
       <div class="product-details">
-        <section class="detail-block article" aria-labelledby="product-description">
-          <h2 id="product-description">Descrição</h2>
-          <Content />
-        </section>
-
         <section class="detail-block article">
           <h2>Conteúdo incluído</h2>
           <ul>{includes.map((item) => <li>{item}</li>)}</ul>
@@ -70,23 +63,42 @@ const faq = headings.find(({ text }) => text.toLocaleLowerCase('pt-BR') === 'per
           <dl class="spec-list">
             <div><dt>Formatos</dt><dd>{formats.join(', ')}</dd></div>
             <div><dt>Requisitos de software</dt><dd>{requirements.length > 0 ? requirements.join(', ') : 'Não informados'}</dd></div>
-            <div><dt>Versão</dt><dd>{version}</dd></div>
-            <div><dt>Atualização</dt><dd><time datetime={updatedAt}>{formatDate(updatedAt)}</time></dd></div>
           </dl>
         </section>
 
-        <section class="detail-block article">
-          <h2>Licença</h2>
-          <p><strong>{license.type}</strong></p>
-          <p>{license.summary}</p>
-          <a href="/licencas/" class="text-link tap">Informações de licenciamento</a>
-        </section>
+      </div>
+    </div>
+
+    <div class="store-section product-more">
+      <section class="detail-block article" aria-labelledby="product-description">
+        <h2 id="product-description">Descrição</h2>
+        {faq && <a class="text-link tap" href={`#${faq.slug}`}>Perguntas frequentes</a>}
+        <Content />
+      </section>
+
+      <div class="product-disclosures">
+        <details class="detail-block">
+          <summary class="tap">Licença de uso</summary>
+          <div class="article">
+            <p><strong>{license.type}</strong></p>
+            <p>{license.summary}</p>
+            <a href="/licencas/" class="text-link tap">Informações de licenciamento</a>
+          </div>
+        </details>
+        <details class="detail-block">
+          <summary class="tap">Versão e atualização</summary>
+          <dl class="spec-list">
+            <div><dt>Versão</dt><dd>{version}</dd></div>
+            <div><dt>Atualização</dt><dd><time datetime={updatedAt}>{formatDate(updatedAt)}</time></dd></div>
+            <div><dt>SKU</dt><dd>{sku}</dd></div>
+          </dl>
+        </details>
       </div>
     </div>
   </article>
 
   {related.length > 0 && (
-    <section class="editorial-section" aria-labelledby="related">
+    <section class="store-section" aria-labelledby="related">
       <div class="section-heading"><h2 id="related" class="section-title">Produtos relacionados</h2></div>
       <ul class="product-grid">{related.map((item) => <li><ProductTile product={item} /></li>)}</ul>
     </section>

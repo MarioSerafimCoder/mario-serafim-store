@@ -92,9 +92,10 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
   assert.match(await read('avisos-legais.txt'), /Copyright \(c\) 2026 Codrops[\s\S]+SIL OPEN FONT LICENSE/);
 
   await writeProduct('private'); // Sem status: precisa ser draft por padrão.
-  await writeProduct('alpha', { status: 'published' }, 'Descrição de fixture para teste.\n\n### Perguntas frequentes\n\nResposta de teste.');
+  await writeProduct('alpha', { status: 'published', featured: false }, 'Descrição de fixture para teste.\n\n### Perguntas frequentes\n\nResposta de teste.');
   build();
   assert.doesNotMatch(await read('produtos/index.html'), /catalog-controls|catalog-order/);
+  assert.match(await read('index.html'), /id="featured"[^>]*>Produtos digitais[\s\S]+fixture-alpha/);
   assert.deepEqual((await readdir(join(dist, 'produtos'))).sort(), ['fixture-alpha', 'index.html']);
 
   await writeProduct('beta', { status: 'coming_soon', category: 'Categoria B', updatedAt: '2026-11-02' });
@@ -112,8 +113,10 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
   assert.match(alpha, /Descrição de fixture para teste/);
   assert.match(alpha, /\.webp/);
   const betaProduct = beta.slice(beta.indexOf('<main'), beta.indexOf('</article>'));
-  assert.match(betaProduct, /Em breve/);
-  assert.doesNotMatch(betaProduct, /R\$|<button\b|<form\b|schema.org\/InStock/);
+  const betaPurchase = betaProduct.match(/<div class="purchase-panel">([\s\S]*?)<\/div>/)?.[1];
+  assert.match(betaPurchase, /Em breve/);
+  assert.doesNotMatch(betaPurchase, /R\$|<button\b|<a\b/);
+  assert.doesNotMatch(betaProduct, /<form\b|data-add-to-cart|checkout|schema.org\/InStock/i);
   assert.match(alpha, /href="#perguntas-frequentes"/);
   assert.match(alpha, /id="perguntas-frequentes"/);
   assert.match(alpha, /Produtos relacionados[\s\S]+fixture-beta/);

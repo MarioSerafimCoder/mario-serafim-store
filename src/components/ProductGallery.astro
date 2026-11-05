@@ -9,23 +9,86 @@ interface Props {
 const { images } = Astro.props;
 ---
 
-<section aria-labelledby="previews" class="product-gallery">
-  <h2 id="previews" class="eyebrow">Prévias</h2>
-  <ul class="space-y-4">
+<store-gallery class="product-gallery" role="region" aria-label="Prévias do produto">
+  <ul class="gallery-views">
     {images.map((image, index) => (
-      <li>
-        <Image
-          src={image.src}
-          alt={image.alt}
-          width={Math.min(image.src.width, 1024)}
-          widths={[400, 800, 1024]}
-          sizes="(min-width: 58rem) 44vw, 92vw"
-          format="webp"
-          loading={index === 0 ? 'eager' : 'lazy'}
-          fetchpriority={index === 0 ? 'high' : 'auto'}
-          class="gallery-image"
-        />
+      <li data-view>
+        <a href={image.src.src} class="gallery-preview" data-zoom>
+          <Image
+            src={image.src}
+            alt={image.alt}
+            width={Math.min(image.src.width, 1024)}
+            widths={[400, 800, 1024]}
+            sizes="(min-width: 58rem) 48vw, 92vw"
+            format="webp"
+            loading={index === 0 ? 'eager' : 'lazy'}
+            fetchpriority={index === 0 ? 'high' : 'auto'}
+            class="gallery-image"
+          />
+          <span class="gallery-zoom">Ampliar <span aria-hidden="true">↗</span></span>
+        </a>
       </li>
     ))}
   </ul>
-</section>
+
+  {images.length > 1 && (
+    <ul class="gallery-thumbs" aria-label="Escolher prévia" hidden>
+      {images.map((image, index) => (
+        <li>
+          <button type="button" aria-label={`Exibir prévia ${index + 1}: ${image.alt}`} aria-pressed={index === 0} data-thumb>
+            <Image src={image.src} alt="" width={Math.min(image.src.width, 144)} format="webp" />
+          </button>
+        </li>
+      ))}
+    </ul>
+  )}
+
+  <dialog class="gallery-dialog" aria-label="Prévia ampliada">
+    <div class="gallery-dialog-content">
+      <button type="button" class="tap gallery-close" autofocus>Fechar prévia</button>
+      <img alt="" />
+    </div>
+  </dialog>
+</store-gallery>
+
+<script>
+  class StoreGallery extends HTMLElement {
+    connectedCallback() {
+      const views = [...this.querySelectorAll<HTMLLIElement>('[data-view]')];
+      const thumbs = [...this.querySelectorAll<HTMLButtonElement>('[data-thumb]')];
+      const thumbnailList = this.querySelector<HTMLUListElement>('.gallery-thumbs');
+
+      if (thumbnailList) {
+        const select = (index: number) => {
+          views.forEach((view, position) => { view.hidden = position !== index; });
+          thumbs.forEach((thumb, position) => thumb.setAttribute('aria-pressed', String(position === index)));
+        };
+
+        thumbs.forEach((thumb, index) => thumb.addEventListener('click', () => select(index)));
+        select(0);
+        thumbnailList.hidden = false;
+      }
+
+      const dialog = this.querySelector('dialog');
+      const enlarged = dialog?.querySelector('img');
+      const close = dialog?.querySelector('button');
+      if (!dialog || !enlarged || !close || typeof dialog.showModal !== 'function') return;
+
+      this.querySelectorAll<HTMLAnchorElement>('[data-zoom]').forEach((link) => {
+        link.addEventListener('click', (event) => {
+          if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          enlarged.src = link.href;
+          enlarged.alt = link.querySelector('img')?.alt ?? '';
+          dialog.showModal();
+        });
+      });
+      close.addEventListener('click', () => dialog.close());
+      dialog.addEventListener('click', (event) => {
+        if (event.target === dialog) dialog.close();
+      });
+    }
+  }
+
+  customElements.define('store-gallery', StoreGallery);
+</script>

@@ -10,10 +10,10 @@ const categories = [...new Set(products.map(({ data }) => data.category))]
 
 <BaseLayout title="Produtos" description="Explore o catálogo de produtos digitais de Mário Serafim.">
   <section class="space-y-6" aria-labelledby="catalog-heading">
-    <header class="page-intro">
+    <header class="page-intro catalog-intro">
       <p class="eyebrow">Mário Serafim Store / Catálogo</p>
       <h1 id="catalog-heading" class="display">Produtos digitais</h1>
-      <p class="lede">Explore os recursos por categoria e consulte as prévias, os formatos e as licenças de cada produto.</p>
+      <p class="lede">Encontre recursos para o seu próximo projeto e confira o que cada arquivo inclui.</p>
     </header>
 
     {products.length === 0 ? (
