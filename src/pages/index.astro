@@ -11,20 +11,36 @@ const categories = [...new Set(products.map(({ data }) => data.category))].sort(
 <BaseLayout>
   <section class="hero">
     <div class="hero-copy">
-      <p class="eyebrow"><span class="signal"></span> Loja de Mário Serafim</p>
+      <p class="eyebrow"><span class="signal"></span> Mário Serafim / Loja digital</p>
       <h1 class="display">Recursos digitais<br />para <em>criar.</em></h1>
-      <p class="lede">Uma seleção de arquivos para explorar ideias e levar projetos de design adiante.</p>
+      <p class="lede">Arquivos de design para desenvolver ideias, experimentar formas e dar acabamento aos seus projetos.</p>
       <a class="action" href="/produtos/">Explorar catálogo <span aria-hidden="true">↗</span></a>
     </div>
     <div class="hero-art" aria-hidden="true">
-      <span class="art-caption">MÁRIO SERAFIM <span>FIG. 01</span></span>
-      <svg viewBox="0 0 420 320" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M20 160H400M210 20V300" stroke="currentColor" stroke-opacity=".27"/>
-        <circle cx="210" cy="160" r="125" stroke="currentColor" stroke-opacity=".46"/>
-        <ellipse cx="210" cy="160" rx="62" ry="125" transform="rotate(43 210 160)" stroke="currentColor"/>
-        <ellipse cx="210" cy="160" rx="62" ry="125" transform="rotate(-43 210 160)" stroke="currentColor"/>
-        <path d="M210 80Q210 160 294 160Q210 160 210 240Q210 160 126 160Q210 160 210 80Z" fill="currentColor"/>
-        <circle cx="210" cy="160" r="10" class="art-center"/>
+      <span class="art-caption">MÁRIO SERAFIM STORE <span>FIG. 01</span></span>
+      <svg viewBox="0 0 520 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="ribbon" x1="92" y1="75" x2="453" y2="342" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#6f121b" />
+            <stop offset=".33" stop-color="#ff5344" />
+            <stop offset=".65" stop-color="#d2292e" />
+            <stop offset="1" stop-color="#65111a" />
+          </linearGradient>
+          <linearGradient id="fold" x1="177" y1="337" x2="370" y2="80" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#790e20" />
+            <stop offset=".55" stop-color="#e12830" />
+            <stop offset="1" stop-color="#ff7964" />
+          </linearGradient>
+        </defs>
+        <g stroke="#3a3231">
+          <path d="M0 104C132 33 337 44 520 169M0 156C139 77 319 78 520 204M0 212C139 115 318 109 520 243M0 268C146 155 318 145 520 280M0 324C170 192 342 195 520 316"/>
+          <circle cx="266" cy="201" r="151" stroke-dasharray="2 5" />
+          <path d="M266 24v352M36 201h460" stroke-dasharray="3 7" />
+        </g>
+        <path d="M105 241C116 141 185 77 313 62c75-9 138 18 133 69-4 52-79 105-187 134-57 16-115 12-154-24Zm34-28c41 21 82 19 134 5 83-22 147-64 149-89 2-28-57-35-112-27-84 12-145 52-171 111Z" fill="url(#ribbon)" fill-rule="evenodd" />
+        <path d="M119 219c-31 55-24 110 20 127 66 27 196-39 249-121 31-48 39-88 25-112 4 34-26 75-62 110-62 60-155 106-195 94-27-8-28-39-8-79l-29-19Z" fill="url(#fold)" />
+        <path d="M127 216C165 135 232 101 311 90c54-8 92-1 108 12M143 326c48 28 157-32 224-103" stroke="#ff9b83" stroke-opacity=".5" />
+        <circle cx="266" cy="201" r="4" fill="#e64843" />
       </svg>
       <span class="art-caption">ESTUDO DE FORMA <span>01 / 01</span></span>
     </div>
