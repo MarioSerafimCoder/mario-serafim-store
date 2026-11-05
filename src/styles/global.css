@@ -1,17 +1,5 @@
 @import 'tailwindcss';
 
-@font-face {
-  font-family: 'Instrument Serif';
-  src: url('/marca/instrument-serif.woff2') format('woff2');
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Instrument Serif';
-  src: url('/marca/instrument-serif-italic.woff2') format('woff2');
-  font-style: italic;
-  font-display: swap;
-}
-
 @theme static {
   --color-paper: light-dark(#faf9f7, #121212);
   --color-brand: #b42329;
@@ -81,7 +69,7 @@
 
 @layer components {
   .shell { width: min(100% - clamp(2rem, 8vw, 8rem), 86rem); margin-inline: auto; }
-  .page-main { flex: 1; padding-block: clamp(1.5rem, 4vw, 3.5rem); }
+  .page-main { flex: 1; padding-block: clamp(1.25rem, 3vw, 2.75rem); }
   .site-header { border-bottom: 1px solid var(--line); }
   .masthead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 2rem; padding-block: .65rem; }
   .masthead nav { display: flex; flex-wrap: wrap; gap: 0 clamp(.85rem, 3vw, 2rem); }
@@ -104,29 +92,29 @@
     flex-wrap: wrap;
     align-items: end;
     justify-content: space-between;
-    gap: 1.1rem 2rem;
-    padding-block: .5rem clamp(1.4rem, 3vw, 2.5rem);
+    gap: .9rem 2rem;
+    padding-block: .25rem clamp(1.2rem, 2.4vw, 2rem);
     border-bottom: 1px solid var(--line);
   }
   .store-hero > div { display: grid; gap: .65rem; }
-  .store-hero .display { font-size: clamp(3rem, 6vw, 6.2rem); text-wrap: balance; }
+  .store-hero .display { font-size: clamp(2rem, 5.5vw, 4rem); text-wrap: balance; }
   .store-hero .lede { max-width: 59ch; }
-  .display { font: 400 clamp(3.4rem, 7.6vw, 8rem)/.94 'Instrument Serif', Georgia, serif; letter-spacing: -.025em; overflow-wrap: anywhere; }
-  .display em { font-style: italic; color: var(--accent); }
+  .display { font-size: clamp(2rem, 4.5vw, 3.25rem); font-weight: 600; line-height: 1.08; letter-spacing: -.04em; overflow-wrap: anywhere; }
+  .display em { font-style: normal; color: var(--accent); }
   .eyebrow { font-size: .75rem; font-weight: 650; letter-spacing: .105em; text-transform: uppercase; line-height: 1.4; }
   .eyebrow { color: var(--muted); }
   .eyebrow .signal { margin-inline-end: .4rem; }
-  .lede { max-width: 42ch; color: var(--muted); font-size: clamp(1rem, 1.8vw, 1.2rem); line-height: 1.55; }
+  .lede { max-width: 42ch; color: var(--muted); font-size: clamp(.9375rem, 1.5vw, 1rem); line-height: 1.55; }
   .action { display: inline-flex; align-items: center; justify-content: space-between; gap: 1.5rem; width: fit-content; min-height: 3rem; padding: .7rem 1rem; border-radius: 100px; background: var(--ink); color: var(--color-paper); font-weight: 650; }
   .action:hover { background: var(--action-hover); }
   .action:focus-visible { outline-color: var(--ink); }
   .text-link { font-weight: 600; text-decoration: underline; text-underline-offset: .25em; }
   .text-link:hover { color: var(--accent); }
 
-  .store-section { margin-top: clamp(1.5rem, 4vw, 3.5rem); }
+  .store-section { margin-top: clamp(1.35rem, 3vw, 2.5rem); }
   .store-section + .store-section { padding-top: clamp(1rem, 3vw, 2rem); border-top: 1px solid var(--line); }
-  .section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: .25rem 1.5rem; margin-bottom: 1.25rem; }
-  .section-title { font: 400 clamp(2.4rem, 4vw, 3.9rem)/1 'Instrument Serif', Georgia, serif; letter-spacing: -.02em; }
+  .section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: .25rem 1.5rem; margin-bottom: .9rem; }
+  .section-title { font-size: clamp(1.5rem, 3vw, 2.25rem); font-weight: 600; line-height: 1.15; letter-spacing: -.035em; }
   .category-list { display: flex; flex-wrap: wrap; gap: .55rem; }
   .category-list a { border: 1px solid var(--line); border-radius: 100px; padding-inline: .9rem; font-weight: 650; }
   .category-list a:hover { border-color: var(--accent); color: var(--accent); }
@@ -138,7 +126,6 @@
 
   .page-intro { display: grid; justify-items: start; gap: 1rem; padding-block: clamp(.75rem, 3vw, 2rem); }
   .catalog-intro { padding-block: .4rem 1rem; gap: .6rem; }
-  .catalog-intro .display { font-size: clamp(3rem, 6vw, 5.5rem); }
   .page-intro.article { max-width: 66ch; }
   .empty-state { display: grid; gap: .5rem; padding: clamp(1.25rem, 4vw, 2.5rem); background: var(--mat); border-left: .2rem solid var(--accent); }
   .product-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(.9rem, 2vw, 1.5rem); }
@@ -146,13 +133,23 @@
   .tile-link { display: flex; height: 100%; flex-direction: column; border: 1px solid var(--line); border-radius: .55rem; background: var(--surface); }
   .tile-image { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: var(--mat); border-radius: .5rem .5rem 0 0; }
   .tile-copy { display: flex; flex: 1; flex-direction: column; gap: .4rem; padding: clamp(.8rem, 1.7vw, 1.15rem); overflow-wrap: anywhere; }
-  .tile-copy .text-copy { color: var(--muted); }
+  .tile-summary {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    color: var(--muted);
+    font-size: .9375rem;
+    line-height: 1.4;
+  }
+  .tile-formats { color: var(--muted); font-size: .8125rem; }
   .tile-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .55rem; margin-top: auto; padding-top: .65rem; }
   .tile-cta { display: inline-flex; align-items: center; gap: .35rem; min-height: 44px; padding: .45rem .75rem; border: 1px solid var(--line); border-radius: 100px; font-size: .82rem; font-weight: 650; }
   .tile-link:hover .tile-cta { border-color: var(--ink); background: var(--ink); color: var(--color-paper); }
-  .tile-title { font-size: clamp(1.25rem, 2.3vw, 1.65rem); font-weight: 650; letter-spacing: -.035em; line-height: 1.15; }
+  .tile-title { font-size: clamp(1.125rem, 1.8vw, 1.375rem); font-weight: 600; letter-spacing: -.025em; line-height: 1.15; }
   .tile-link:hover .tile-title { color: var(--accent); text-decoration: underline; text-underline-offset: .15em; }
-  .tile-price { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tile-price, .product-price { font-size: clamp(1.25rem, 1.8vw, 1.5rem); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tile-price.status-label { font-size: .8125rem; }
   .status-label { color: var(--accent); }
   .catalog-controls { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; border-block: 1px solid var(--line); padding-block: 1rem; font-size: .875rem; }
   .catalog-controls label { min-width: 0; max-width: 100%; }
@@ -161,9 +158,8 @@
   .product-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; color: var(--muted); font-size: .875rem; margin-bottom: 1.25rem; }
   .product-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 1rem clamp(2rem, 4vw, 4.5rem); }
   .product-intro { display: grid; gap: .65rem; min-width: 0; }
-  .product-intro .display { font-size: clamp(2.8rem, 5vw, 5rem); }
-  .purchase-panel { display: grid; gap: .4rem; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--surface); }
-  .product-price { font-size: clamp(1.55rem, 3vw, 2.05rem); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .product-intro .display { font-size: clamp(1.75rem, 3.6vw, 2.75rem); }
+  .purchase-panel { display: grid; gap: .4rem; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--surface); border-inline-start: 3px solid var(--accent); }
   .purchase-state { display: flex; align-items: center; gap: .55rem; color: var(--muted); font-size: .88rem; }
   .purchase-state .signal { width: .4rem; height: .4rem; }
   .product-gallery { display: grid; gap: .65rem; min-width: 0; }
@@ -181,12 +177,13 @@
   .gallery-close { justify-self: end; padding-inline: .6rem; cursor: pointer; }
   .gallery-dialog img { width: 100%; height: min(74dvh, 60rem); object-fit: contain; }
   .product-more { display: grid; gap: 1rem 3rem; }
-  .product-more .article { max-width: 70ch; }
+  .product-more .article { max-width: 68ch; overflow-wrap: anywhere; }
+  .product-more > *, .spec-list dd { min-width: 0; }
   .product-disclosures summary { display: list-item; cursor: pointer; font-weight: 650; }
   .product-disclosures .detail-block { padding-block: .55rem; }
   .product-details { min-width: 0; max-width: 65ch; overflow-wrap: anywhere; }
-  .detail-block { padding-block: 1.3rem; border-top: 1px solid var(--line); }
-  .detail-block > h2 { font-size: 1.45rem; font-weight: 650; letter-spacing: -.035em; }
+  .detail-block { padding-block: 1rem; border-top: 1px solid var(--line); }
+  .detail-block > h2 { font-size: clamp(1.125rem, 1.8vw, 1.375rem); font-weight: 600; letter-spacing: -.025em; }
   .spec-list { margin-top: .8rem; }
   .spec-list div { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: .75rem; border-bottom: 1px solid var(--line); padding-block: .6rem; }
   .spec-list dt { color: var(--muted); }
@@ -248,7 +245,6 @@
     .masthead .theme-switch { grid-column: 2; grid-row: 1; }
     .wordmark img { width: 2.4rem; }
     .wordmark-label { font-size: .85rem; }
-    .display { font-size: clamp(2.85rem, 12vw, 4.5rem); }
     .catalog-controls label { flex: 1 1 9rem; }
   }
 }

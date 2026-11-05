@@ -8,7 +8,7 @@ interface Props {
 }
 
 const { product } = Astro.props;
-const { category, images: [cover], name, priceCents, status, summary } = product.data;
+const { category, formats, images: [cover], name, priceCents, status, summary } = product.data;
 ---
 
 <article class="product-tile">
@@ -25,7 +25,8 @@ const { category, images: [cover], name, priceCents, status, summary } = product
     <div class="tile-copy">
       <p class="eyebrow">{category}</p>
       <h3 class="tile-title">{name}</h3>
-      <p class="text-copy">{summary}</p>
+      <p class="tile-summary">{summary}</p>
+      <p class="tile-formats">{formats.slice(0, 3).join(' · ')}{formats.length > 3 && ` · +${formats.length - 3}`}</p>
       <div class="tile-footer">
         <span class:list={['tile-price', status === 'coming_soon' && 'status-label']}>{status === 'coming_soon' ? 'Em breve' : formatPrice(priceCents)}</span>
         <span class="tile-cta">Ver produto <span aria-hidden="true">↗</span></span>
