@@ -1,0 +1,18 @@
+---
+import { site } from '../config/site';
+
+const path = Astro.url.pathname;
+const current = (href: string) =>
+  path === href ? 'page' : path.startsWith(href) ? 'true' as const : undefined;
+---
+
+<header class="site-header">
+  <div class="shell masthead">
+    <a href="/" class="wordmark tap" aria-current={path === '/' ? 'page' : undefined}>
+      <span class="signal" aria-hidden="true"></span> {site.name}
+    </a>
+    <nav aria-label="Navegação principal">
+      {site.nav.map((item) => <a href={item.href} aria-current={current(item.href)} class="tap">{item.label}</a>)}
+    </nav>
+  </div>
+</header>

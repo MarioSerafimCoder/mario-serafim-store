@@ -1,0 +1,31 @@
+---
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
+interface Props {
+  images: { src: ImageMetadata; alt: string }[];
+}
+
+const { images } = Astro.props;
+---
+
+<section aria-labelledby="previews" class="product-gallery">
+  <h2 id="previews" class="eyebrow">Prévias</h2>
+  <ul class="space-y-4">
+    {images.map((image, index) => (
+      <li>
+        <Image
+          src={image.src}
+          alt={image.alt}
+          width={Math.min(image.src.width, 1024)}
+          widths={[400, 800, 1024]}
+          sizes="(min-width: 58rem) 44vw, 92vw"
+          format="webp"
+          loading={index === 0 ? 'eager' : 'lazy'}
+          fetchpriority={index === 0 ? 'high' : 'auto'}
+          class="gallery-image"
+        />
+      </li>
+    ))}
+  </ul>
+</section>

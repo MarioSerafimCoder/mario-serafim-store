@@ -1,0 +1,33 @@
+---
+import type { ComponentProps } from 'astro/types';
+import { Font } from 'astro:assets';
+import '../styles/global.css';
+import Seo from '../components/Seo.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+
+interface Props extends ComponentProps<typeof Seo> {}
+
+const seo = Astro.props;
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <Seo {...seo} />
+    <Font cssVariable="--font-instrument-sans" preload />
+  </head>
+  <body class="flex min-h-svh flex-col">
+    <a
+      href="#main"
+      class="sr-only z-30 rounded-sm bg-black p-2 text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+    >
+      Pular para o conteúdo
+    </a>
+    <Header />
+    <main id="main" tabindex="-1" class="shell page-main">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

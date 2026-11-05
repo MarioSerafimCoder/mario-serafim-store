@@ -1,0 +1,73 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ProductTile from '../components/ProductTile.astro';
+import { getPublicProducts } from '../lib/shop';
+
+const products = await getPublicProducts();
+const featured = products.filter(({ data }) => data.featured).slice(0, 3);
+const categories = [...new Set(products.map(({ data }) => data.category))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+---
+
+<BaseLayout>
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="signal"></span> Loja de Mário Serafim</p>
+      <h1 class="display">Recursos digitais<br />para <em>criar.</em></h1>
+      <p class="lede">Uma seleção de arquivos para explorar ideias e levar projetos de design adiante.</p>
+      <a class="action" href="/produtos/">Explorar catálogo <span aria-hidden="true">↗</span></a>
+    </div>
+    <div class="hero-art" aria-hidden="true">
+      <span class="art-caption">MÁRIO SERAFIM <span>FIG. 01</span></span>
+      <svg viewBox="0 0 420 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 160H400M210 20V300" stroke="currentColor" stroke-opacity=".27"/>
+        <circle cx="210" cy="160" r="125" stroke="currentColor" stroke-opacity=".46"/>
+        <ellipse cx="210" cy="160" rx="62" ry="125" transform="rotate(43 210 160)" stroke="currentColor"/>
+        <ellipse cx="210" cy="160" rx="62" ry="125" transform="rotate(-43 210 160)" stroke="currentColor"/>
+        <path d="M210 80Q210 160 294 160Q210 160 210 240Q210 160 126 160Q210 160 210 80Z" fill="currentColor"/>
+        <circle cx="210" cy="160" r="10" class="art-center"/>
+      </svg>
+      <span class="art-caption">ESTUDO DE FORMA <span>01 / 01</span></span>
+    </div>
+  </section>
+
+  <section class="editorial-section" aria-labelledby="featured">
+    <div class="section-heading">
+      <div><p class="eyebrow">01 / Catálogo</p><h2 id="featured" class="section-title">Em destaque</h2></div>
+      <a class="text-link tap" href="/produtos/">Ver todos os produtos <span aria-hidden="true">↗</span></a>
+    </div>
+    {featured.length > 0 ? (
+      <ul class="product-grid">{featured.map((product) => <li><ProductTile product={product} /></li>)}</ul>
+    ) : (
+      <div class="empty-state">
+        <p class="eyebrow">Catálogo em preparação</p>
+        <p>Os primeiros produtos aparecerão aqui assim que forem anunciados.</p>
+      </div>
+    )}
+  </section>
+
+  <section class="editorial-section" aria-labelledby="categories">
+    <p class="eyebrow">02 / Índice</p>
+    <h2 id="categories" class="section-title">Categorias</h2>
+    {categories.length > 0 ? (
+      <ul class="index-list">{categories.map((category) => (
+        <li><a href={`/produtos/?categoria=${encodeURIComponent(category)}`}>{category}<span aria-hidden="true">↗</span></a></li>
+      ))}</ul>
+    ) : <p class="lede">As categorias serão exibidas à medida que o catálogo ganhar produtos.</p>}
+  </section>
+
+  <section class="editorial-section editorial-pair" aria-labelledby="process">
+    <div><p class="eyebrow">03 / Processo</p><h2 id="process" class="section-title">Do estudo ao arquivo.</h2></div>
+    <div class="article">
+      <p>Um recurso digital começa com uma pergunta de projeto. Testar sua aplicação, organizar os arquivos e explicar como usá-los são partes do mesmo trabalho.</p>
+      <p>Nas páginas dos produtos, as prévias, os formatos e as condições de uso ajudam a avaliar cada recurso para o seu projeto.</p>
+    </div>
+  </section>
+
+  <section class="editorial-section editorial-pair" aria-labelledby="author">
+    <div><p class="eyebrow">04 / Autoria</p><h2 id="author" class="section-title">Mário Serafim</h2></div>
+    <div class="article">
+      <p>Diretor de arte em Fortaleza, com atuação em identidade visual, branding e experiências digitais.</p>
+      <a class="text-link tap" href="/sobre/">Sobre o autor <span aria-hidden="true">↗</span></a>
+    </div>
+  </section>
+</BaseLayout>

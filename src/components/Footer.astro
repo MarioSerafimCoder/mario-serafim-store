@@ -1,0 +1,20 @@
+---
+import { site } from '../config/site';
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer">
+  <div class="shell footer-grid">
+    <div>
+      <a href="/" class="wordmark tap">{site.name}</a>
+      <p>© {year} Mário Serafim</p>
+    </div>
+    <nav aria-label="Navegação do rodapé">
+      {site.nav.map((item) => <a href={item.href} class="tap">{item.label}</a>)}
+    </nav>
+    <nav aria-label="Informações institucionais">
+      {site.legal.map((item) => <a href={item.href} class="tap">{item.label}</a>)}
+      <a href="https://marioserafim.com.br" class="tap">Portfólio <span aria-hidden="true">↗</span></a>
+    </nav>
+  </div>
+</footer>

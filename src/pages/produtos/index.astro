@@ -1,0 +1,93 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ProductTile from '../../components/ProductTile.astro';
+import { getPublicProducts } from '../../lib/shop';
+
+const products = await getPublicProducts();
+const categories = [...new Set(products.map(({ data }) => data.category))]
+  .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+---
+
+<BaseLayout title="Produtos" description="Explore o catálogo de produtos digitais de Mário Serafim.">
+  <section class="space-y-6" aria-labelledby="catalog-heading">
+    <header class="page-intro">
+      <p class="eyebrow">Mário Serafim Store / Catálogo</p>
+      <h1 id="catalog-heading" class="display">Produtos digitais</h1>
+      <p class="lede">Explore os recursos por categoria e consulte as prévias, os formatos e as licenças de cada produto.</p>
+    </header>
+
+    {products.length === 0 ? (
+      <div class="empty-state">
+        <p class="eyebrow">Em preparação</p>
+        <p>O catálogo ainda está vazio. Os produtos aparecerão aqui conforme forem anunciados.</p>
+      </div>
+    ) : (
+      <>
+        <h2 class="sr-only">Catálogo</h2>
+        {products.length > 1 && (
+          <div id="catalog-controls" class="catalog-controls" hidden>
+            {categories.length > 1 && (
+              <label class="grid gap-1">
+                Categoria
+                <select id="catalog-category" class="catalog-select">
+                  <option value="">Todas</option>
+                  {categories.map((category) => <option value={category}>{category}</option>)}
+                </select>
+              </label>
+            )}
+            <label class="grid gap-1">
+              Ordenar por
+              <select id="catalog-order" class="catalog-select">
+                <option value="name">Nome</option>
+                <option value="recent">Atualização mais recente</option>
+              </select>
+            </label>
+            <p id="catalog-count" role="status" class="sr-only"></p>
+          </div>
+        )}
+        <ul id="catalog" class="product-grid">
+          {products.map((product) => (
+            <li data-category={product.data.category} data-updated={product.data.updatedAt}>
+              <ProductTile product={product} />
+            </li>
+          ))}
+        </ul>
+      </>
+    )}
+  </section>
+
+  {products.length > 1 && (
+    <script is:inline type="module">
+      const controls = document.querySelector('#catalog-controls');
+      const catalog = document.querySelector('#catalog');
+      const category = document.querySelector('#catalog-category');
+      const order = document.querySelector('#catalog-order');
+      const count = document.querySelector('#catalog-count');
+      const byName = Array.from(catalog.children);
+      const byRecent = [...byName].sort((a, b) => b.dataset.updated.localeCompare(a.dataset.updated));
+
+      function update() {
+        const selectedCategory = category?.value;
+        const sorted = order.value === 'recent' ? byRecent : byName;
+        let shown = 0;
+
+        for (const item of sorted) {
+          item.hidden = Boolean(selectedCategory && item.dataset.category !== selectedCategory);
+          catalog.append(item);
+          if (!item.hidden) shown++;
+        }
+
+        count.textContent = shown === 1 ? '1 produto exibido.' : `${shown} produtos exibidos.`;
+      }
+
+      const requestedCategory = new URLSearchParams(location.search).get('categoria');
+      if (category && [...category.options].some(({ value }) => value === requestedCategory)) {
+        category.value = requestedCategory;
+        update();
+      }
+
+      controls.addEventListener('change', update);
+      controls.hidden = false;
+    </script>
+  )}
+</BaseLayout>
