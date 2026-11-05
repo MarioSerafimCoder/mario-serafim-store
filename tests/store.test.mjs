@@ -111,8 +111,9 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
   assert.match(alpha, /R\$\s*12,99/);
   assert.match(alpha, /Descrição de fixture para teste/);
   assert.match(alpha, /\.webp/);
-  assert.match(beta, /Em breve/);
-  assert.doesNotMatch(beta.split('</article>')[0], /R\$|<button\b|<form\b|schema.org\/InStock/);
+  const betaProduct = beta.slice(beta.indexOf('<main'), beta.indexOf('</article>'));
+  assert.match(betaProduct, /Em breve/);
+  assert.doesNotMatch(betaProduct, /R\$|<button\b|<form\b|schema.org\/InStock/);
   assert.match(alpha, /href="#perguntas-frequentes"/);
   assert.match(alpha, /id="perguntas-frequentes"/);
   assert.match(alpha, /Produtos relacionados[\s\S]+fixture-beta/);
