@@ -15,6 +15,35 @@ const seo = Astro.props;
 <html lang="pt-BR">
   <head>
     <Seo {...seo} />
+    <script is:inline id="store-theme">
+      let preference;
+      try { preference = localStorage.getItem('store-theme'); } catch {}
+      const root = document.documentElement;
+      const system = matchMedia('(prefers-color-scheme: dark)');
+      if (preference === 'light' || preference === 'dark') root.dataset.theme = preference;
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const button = document.getElementById('theme-switch');
+        const label = button.querySelector('span');
+        const activeTheme = () => root.dataset.theme || (system.matches ? 'dark' : 'light');
+        const updateLabel = () => {
+          const next = activeTheme() === 'dark' ? 'claro' : 'escuro';
+          label.textContent = 'Tema ' + next;
+          button.setAttribute('aria-label', 'Ativar tema ' + next);
+        };
+
+        button.addEventListener('click', () => {
+          const next = activeTheme() === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('store-theme', next); } catch {}
+          updateLabel();
+        });
+
+        system.addEventListener('change', updateLabel);
+        updateLabel();
+        button.hidden = false;
+      });
+    </script>
     <Font cssVariable="--font-instrument-sans" preload />
   </head>
   <body class="flex min-h-svh flex-col">

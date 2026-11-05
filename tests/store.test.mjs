@@ -81,7 +81,9 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
   for (const page of pages) {
     const html = await read(page);
     assert.match(html, /<html lang="pt-BR">/);
-    assert.doesNotMatch(html, /<script\b|<form\b|data-add-to-cart|isle.thorne|newsletter|checkout/i);
+    assert.match(html, /<script id="store-theme">/);
+    const withoutTheme = html.replace(/<script id="store-theme">[\s\S]*?<\/script>/, '');
+    assert.doesNotMatch(withoutTheme, /<script\b|<form\b|data-add-to-cart|isle.thorne|newsletter|checkout/i);
   }
   assert.match(await read('produtos/index.html'), /catálogo ainda está vazio/);
   for (const page of ['termos/index.html', 'privacidade/index.html', '404.html']) {
