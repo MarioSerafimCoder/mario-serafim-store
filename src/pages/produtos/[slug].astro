@@ -2,6 +2,7 @@
 import type { GetStaticPaths } from 'astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import ProductGallery from '../../components/ProductGallery.astro';
+import CheckoutAction from '../../components/CheckoutAction.astro';
 import ProductTile from '../../components/ProductTile.astro';
 import { formatDate, formatPrice } from '../../lib/format';
 import { getPublicProducts, renderProductDescription, type Product } from '../../lib/shop';
@@ -24,7 +25,7 @@ interface Props {
 }
 
 const { product, related } = Astro.props;
-const { category, formats, images, includes, license, name, priceCents, requirements,
+const { category, formats, images, includes, license, name, priceCents, requirements, slug,
   sku, status, summary, updatedAt, version } = product.data;
 const { Content, headings } = await renderProductDescription(product);
 const faq = headings.find(({ text }) => text.toLocaleLowerCase('pt-BR') === 'perguntas frequentes');
@@ -46,7 +47,11 @@ const faq = headings.find(({ text }) => text.toLocaleLowerCase('pt-BR') === 'per
           {status === 'coming_soon'
             ? <p class="eyebrow status-label">Em breve</p>
             : <p class="product-price">{formatPrice(priceCents)}</p>}
-          <p class="purchase-state"><span class="signal" aria-hidden="true"></span>Compra indisponível nesta etapa.</p>
+          {status === 'published' && priceCents > 0 && !sku.startsWith('DEMO-') && !slug.startsWith('demo-') ? (
+            <CheckoutAction sku={sku} />
+          ) : (
+            <p class="purchase-state"><span class="signal" aria-hidden="true"></span>Compra indisponível nesta etapa.</p>
+          )}
         </div>
       </header>
 

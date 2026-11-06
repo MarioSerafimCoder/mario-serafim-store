@@ -94,3 +94,7 @@ Na fase Mercado Pago, validar a origem da confirmação e consultar o provedor n
 - Em 05/11/2026, o domínio `loja.marioserafim.com.br` foi vinculado ao Worker `mario-serafim-store-demo-ed0faa` como domínio personalizado.
 - As três entradas e suas capas estão em `tests/demo/`. A publicação usa uma cópia temporária com essas entradas, um aviso de demonstração e o cabeçalho `X-Robots-Tag: noindex, nofollow`.
 - O catálogo normal em `src/content/products/` segue separado dos dados de teste. Antes do lançamento, substituir o build de demonstração no Worker por um build com produtos reais e revisar a indexação.
+
+## Checkout Pro
+
+O Worker, as migrations e a interface de compras estão no repositório. A homologação e a configuração de produção seguem o [guia de operação do checkout](COMMERCE.md).

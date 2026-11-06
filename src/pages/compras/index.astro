@@ -1,0 +1,102 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Minha compra" noindex>
+  <section class="page-intro article" aria-labelledby="purchase-heading">
+    <h1 id="purchase-heading" class="display">Minha compra</h1>
+    <p id="purchase-title"></p>
+    <p id="purchase-status" role="status">Consultando seu pedido…</p>
+    <button id="purchase-refresh" class="action" type="button" hidden>Atualizar pagamento</button>
+    <form id="purchase-download" method="post" action="/compras/api/download" hidden>
+      <input type="hidden" name="grant" />
+      <button class="action" type="submit">Baixar produto</button>
+    </form>
+    <form id="purchase-recover" class="article" method="post" hidden>
+      <label class="block">
+        Código de recuperação
+        <input class="catalog-select" name="code" required autocomplete="off" spellcheck="false" maxlength="36" />
+      </label>
+      <button class="action" type="submit">Recuperar compra</button>
+    </form>
+    <noscript>Ative o JavaScript para consultar o pedido e recuperar o acesso.</noscript>
+  </section>
+</BaseLayout>
+
+<script>
+  const status = document.querySelector<HTMLParagraphElement>('#purchase-status')!;
+  const title = document.querySelector<HTMLParagraphElement>('#purchase-title')!;
+  const refresh = document.querySelector<HTMLButtonElement>('#purchase-refresh')!;
+  const download = document.querySelector<HTMLFormElement>('#purchase-download')!;
+  const recover = document.querySelector<HTMLFormElement>('#purchase-recover')!;
+  const grant = download.querySelector<HTMLInputElement>('[name="grant"]')!;
+  const code = recover.querySelector<HTMLInputElement>('[name="code"]')!;
+  let expected = new URLSearchParams(location.search).get('pedido');
+
+  const messages: Record<string, string> = {
+    approved: 'Pagamento confirmado. Seu arquivo está disponível.',
+    created: 'Pedido criado. Aguardando o pagamento.',
+    pending: 'Pagamento pendente de confirmação.',
+    rejected: 'O Mercado Pago recusou o pagamento.',
+    canceled: 'O pagamento foi cancelado ou expirou.',
+    refunded: 'O pagamento foi estornado. O download foi revogado.',
+    disputed: 'O pagamento está em contestação.',
+    review: 'O pedido está em revisão.',
+  };
+
+  async function load(update = false) {
+    refresh.disabled = true;
+    download.hidden = true;
+    try {
+      if (update) {
+        const checked = await fetch('/compras/api/atualizar', { method: 'POST' });
+        if (!checked.ok) throw new Error('Falha na atualização');
+      }
+      const query = expected ? `?pedido=${encodeURIComponent(expected)}` : '';
+      const response = await fetch(`/compras/api/pedido${query}`);
+      const result = await response.json();
+      if (!response.ok) {
+        title.textContent = '';
+        refresh.hidden = true;
+        status.textContent = result.error ?? 'Use seu código para consultar o pedido.';
+        return;
+      }
+      title.textContent = result.title;
+      status.textContent = messages[result.status] ?? 'Pedido em análise.';
+      refresh.hidden = false;
+      grant.value = result.grant ?? '';
+      download.hidden = !grant.value;
+    } catch {
+      status.textContent = 'Não foi possível consultar agora. Tente novamente.';
+    } finally {
+      refresh.disabled = false;
+    }
+  }
+
+  refresh.addEventListener('click', () => void load(true));
+  recover.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    status.textContent = 'Recuperando sua compra…';
+    try {
+      const response = await fetch('/compras/api/recuperar', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ code: code.value.trim().toLowerCase() }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        status.textContent = result.error ?? 'Não foi possível recuperar a compra.';
+        return;
+      }
+      code.value = '';
+      expected = result.id;
+      history.replaceState(null, '', '/compras/');
+      await load(true);
+    } catch {
+      status.textContent = 'Não foi possível recuperar agora. Tente novamente.';
+    }
+  });
+
+  recover.hidden = false;
+  void load(Boolean(expected));
+</script>

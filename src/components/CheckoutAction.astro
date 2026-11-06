@@ -1,0 +1,94 @@
+---
+interface Props {
+  sku: string;
+}
+
+const { sku } = Astro.props;
+---
+
+<store-checkout data-sku={sku}>
+  <p class="purchase-state"><span class="signal" aria-hidden="true"></span>Compra indisponível nesta etapa.</p>
+  <button type="button" class="action" hidden>Comprar com Mercado Pago</button>
+  <p role="status"></p>
+  <div class="article" hidden>
+    <p>Guarde este código para recuperar sua compra em outro navegador ou dispositivo.</p>
+    <label class="block">
+      Código de recuperação
+      <input class="catalog-select" readonly spellcheck="false" />
+    </label>
+    <a class="action" referrerpolicy="no-referrer">Continuar para o Mercado Pago</a>
+  </div>
+</store-checkout>
+
+<script>
+  class StoreCheckout extends HTMLElement {
+    async connectedCallback() {
+      const sku = this.dataset.sku;
+      const button = this.querySelector('button');
+      const notice = this.querySelector<HTMLElement>('.purchase-state');
+      const status = this.querySelector('[role="status"]');
+      const next = this.querySelector('div');
+      const codeField = this.querySelector('input');
+      const link = this.querySelector('a');
+      if (!sku || !button || !notice || !status || !next || !codeField || !link) return;
+
+      const availability = await fetch(`/compras/api/disponibilidade?sku=${encodeURIComponent(sku)}`)
+        .then((response) => response.ok ? response.json() : null)
+        .catch(() => null);
+      if (availability?.available !== true) return;
+
+      const key = `store-checkout:${sku}`;
+      let code = crypto.randomUUID();
+      try {
+        const previous = sessionStorage.getItem(key);
+        if (previous) code = previous as typeof code;
+        sessionStorage.setItem(key, code);
+      } catch {}
+
+      notice.hidden = true;
+      button.hidden = false;
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        status.textContent = 'Preparando seu pedido…';
+        try {
+          const response = await fetch('/compras/api/checkout', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ sku, code }),
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            status.textContent = result.error ?? 'Tente novamente.';
+            if (response.status === 409) {
+              link.href = '/compras/';
+              link.textContent = 'Consultar meu pedido';
+              codeField.value = code;
+              next.hidden = false;
+              button.hidden = true;
+            }
+            return;
+          }
+          codeField.value = code;
+          link.href = result.checkoutUrl;
+          next.hidden = false;
+          button.hidden = true;
+          status.textContent = 'Pedido preparado.';
+          codeField.focus();
+        } catch {
+          status.textContent = 'Não foi possível conectar. Tente novamente nesta mesma aba.';
+        } finally {
+          button.disabled = false;
+        }
+      });
+    }
+  }
+
+  customElements.define('store-checkout', StoreCheckout);
+</script>
+
+<style>
+  store-checkout, .article { display: grid; justify-items: start; gap: .6rem; }
+  [role="status"]:empty { display: none; }
+  button:enabled { cursor: pointer; }
+  button:disabled { opacity: .7; }
+</style>

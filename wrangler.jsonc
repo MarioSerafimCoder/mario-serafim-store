@@ -2,9 +2,38 @@
   "$schema": "https://unpkg.com/wrangler/config-schema.json",
   "name": "mario-serafim-store",
   "compatibility_date": "2026-11-05",
+  "main": "./worker/index.ts",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/compras/api/*", "/compras/retorno/*"],
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
+  },
+  "vars": {
+    "CHECKOUT_ENABLED": "false",
+    "MP_MODE": "production",
+    "STORE_ORIGIN": "https://loja.marioserafim.com.br"
+  },
+  "env": {
+    "homologacao": {
+      "name": "mario-serafim-store-homologacao",
+      "workers_dev": true,
+      "vars": {
+        "CHECKOUT_ENABLED": "false",
+        "MP_MODE": "test",
+        "STORE_ORIGIN": "https://mario-serafim-store-homologacao.marioserafim-da.workers.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "mario-serafim-store-homologacao",
+          "database_id": "08575eca-ae3f-49d4-9bce-79840f4e6a59"
+        }
+      ],
+      "triggers": {
+        "crons": ["*/15 * * * *"]
+      }
+    }
   }
 }
