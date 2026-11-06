@@ -2,123 +2,244 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 ---
 
-<BaseLayout title="Minha compra" noindex>
-  <section class="page-intro article" aria-labelledby="purchase-heading">
-    <h1 id="purchase-heading" class="display">Minha compra</h1>
-    <p id="purchase-title"></p>
-    <p id="purchase-order" hidden></p>
-    <p id="purchase-status" role="status">Consultando seu pedido…</p>
-    <button id="purchase-refresh" class="action" type="button" hidden>Atualizar pagamento</button>
-    <div id="purchase-downloads" class="purchase-downloads" hidden aria-label="Downloads da compra"></div>
-    <form id="purchase-recover" class="article" method="post" hidden>
-      <p>O número do pedido sozinho não libera acesso. Se a sessão não estiver disponível, informe o código de recuperação que você possui.</p>
-      <label class="block">
-        Código de recuperação
-        <input class="catalog-select" name="code" required autocomplete="off" spellcheck="false" maxlength="36" />
-      </label>
-      <button class="action" type="submit">Recuperar compra</button>
-    </form>
-    <p class="purchase-support">Precisa de ajuda com um pedido, pagamento ou arquivo? <a href="/contato/">Fale com o suporte</a>.</p>
-    <noscript>Ative o JavaScript para consultar o pedido e recuperar o acesso.</noscript>
-  </section>
+<BaseLayout title="Pedidos" noindex>
+  <a href="/produtos/" class="text-link tap back-link">← Voltar ao catálogo</a>
+  <header class="orders-heading">
+    <h1 class="display">Seus pedidos</h1>
+    <p>Consulte o pagamento e acesse os arquivos da sua compra.</p>
+  </header>
+
+  <div class="orders-layout">
+    <section aria-label="Pedido em consulta">
+      <div class="order-card">
+        <p class="order-notice" id="purchase-notice" role="status"></p>
+        <noscript><p class="order-notice">Ative o JavaScript para consultar o pedido e recuperar o acesso.</p></noscript>
+        <article id="purchase-order" aria-labelledby="purchase-status" hidden>
+          <dl class="order-meta">
+            <div><dt>Pedido realizado</dt><dd id="purchase-date"></dd></div>
+            <div><dt>Total</dt><dd id="purchase-total"></dd></div>
+            <div class="order-id"><dt>Número do pedido</dt><dd id="purchase-id"></dd></div>
+          </dl>
+          <div class="order-body">
+            <div class="order-status" aria-live="polite">
+              <h2 id="purchase-status"></h2>
+              <p id="purchase-detail"></p>
+            </div>
+            <button id="purchase-refresh" class="secondary-action tap" type="button">Atualizar pagamento</button>
+            <ul id="purchase-items" class="order-items" aria-label="Produtos do pedido"></ul>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <aside class="order-card order-help" aria-labelledby="recover-heading">
+      <h2 id="recover-heading">Consultar por código</h2>
+      <p>Informe o código de recuperação para acessar um pedido, inclusive em outro dispositivo.</p>
+      <form id="purchase-recover" method="post" hidden>
+        <label for="purchase-code">Código de recuperação</label>
+        <input class="catalog-select" id="purchase-code" name="code" required autocomplete="off" spellcheck="false" maxlength="36" />
+        <button class="action" type="submit">Consultar pedido</button>
+        <p id="recovery-status" role="status"></p>
+      </form>
+      <div class="order-support">
+        <h3>Precisa de ajuda?</h3>
+        <a href="/contato/" class="text-link tap">Fale com o suporte</a>
+      </div>
+    </aside>
+  </div>
+
+  <template id="purchase-item">
+    <li class="order-item">
+      <div class="order-item-icon" aria-hidden="true">
+        <img width="56" height="56" alt="" decoding="async" referrerpolicy="no-referrer" hidden />
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" />
+        </svg>
+      </div>
+      <div class="order-item-name">
+        <h3></h3>
+        <p>Produto digital</p>
+      </div>
+      <form method="post" action="/compras/api/download" hidden>
+        <input type="hidden" name="grant" />
+        <input type="hidden" name="item" />
+        <button class="action" type="submit">Baixar arquivo</button>
+      </form>
+    </li>
+  </template>
 </BaseLayout>
 
 <script>
-  type PurchaseItem = { id: string; title: string; sku?: string; grant: string | null };
-  type StoredItem = { sku: string };
-  const status = document.querySelector<HTMLParagraphElement>('#purchase-status')!;
-  const title = document.querySelector<HTMLParagraphElement>('#purchase-title')!;
-  const orderLabel = document.querySelector<HTMLParagraphElement>('#purchase-order')!;
+  import { readCart, writeCart } from '../../lib/cart';
+  import { formatPrice } from '../../lib/format';
+
+  type PurchaseItem = { id: string; title: string; sku?: string; image?: string; grant: string | null };
+  type Purchase = { id: string; title: string; status: string; createdAt?: number; totalCents?: number; items: PurchaseItem[] };
+  const order = document.querySelector<HTMLElement>('#purchase-order')!;
+  const status = document.querySelector<HTMLElement>('#purchase-status')!;
+  const detail = document.querySelector<HTMLElement>('#purchase-detail')!;
+  const notice = document.querySelector<HTMLElement>('#purchase-notice')!;
+  const date = document.querySelector<HTMLElement>('#purchase-date')!;
+  const total = document.querySelector<HTMLElement>('#purchase-total')!;
+  const id = document.querySelector<HTMLElement>('#purchase-id')!;
   const refresh = document.querySelector<HTMLButtonElement>('#purchase-refresh')!;
-  const downloads = document.querySelector<HTMLElement>('#purchase-downloads')!;
+  const items = document.querySelector<HTMLUListElement>('#purchase-items')!;
+  const template = document.querySelector<HTMLTemplateElement>('#purchase-item')!;
   const recover = document.querySelector<HTMLFormElement>('#purchase-recover')!;
+  const submit = recover.querySelector<HTMLButtonElement>('button')!;
   const code = recover.querySelector<HTMLInputElement>('[name="code"]')!;
+  const recoveryStatus = document.querySelector<HTMLElement>('#recovery-status')!;
+  const orderDate = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long', timeZone: 'America/Sao_Paulo' });
   let expected = new URLSearchParams(location.search).get('pedido');
 
-  const messages: Record<string, string> = {
-    approved: 'Pagamento confirmado. Seu arquivo está disponível.',
-    created: 'Pedido criado. Aguardando o pagamento.',
-    pending: 'Pagamento pendente de confirmação.',
-    rejected: 'O Mercado Pago recusou o pagamento.',
-    canceled: 'O pagamento foi cancelado ou expirou.',
-    refunded: 'O pagamento foi estornado. O download foi revogado.',
-    disputed: 'O pagamento está em contestação.',
-    review: 'O pedido está em revisão.',
+  const messages: Record<string, [string, string]> = {
+    approved: ['Pagamento confirmado', 'Os arquivos autorizados estão disponíveis para download.'],
+    created: ['Aguardando pagamento', 'O pedido foi criado e aguarda o pagamento.'],
+    pending: ['Pagamento pendente', 'Aguardando a confirmação do Mercado Pago.'],
+    rejected: ['Pagamento recusado', 'O Mercado Pago recusou o pagamento.'],
+    canceled: ['Pagamento cancelado', 'O pagamento foi cancelado ou expirou.'],
+    refunded: ['Pagamento estornado', 'O acesso aos arquivos deste pedido foi revogado.'],
+    disputed: ['Pagamento em contestação', 'Consulte o Mercado Pago para acompanhar a contestação.'],
+    review: ['Pedido em revisão', 'Aguarde a atualização do status.'],
   };
 
-  async function load(update = false) {
-    refresh.disabled = true;
-    downloads.hidden = true;
-    downloads.replaceChildren();
+  function render(result: Purchase) {
+    id.textContent = result.id;
+    date.textContent = typeof result.createdAt === 'number' ? orderDate.format(result.createdAt * 1000) : '—';
+    total.textContent = typeof result.totalCents === 'number' ? formatPrice(result.totalCents) : '—';
+    const [heading, explanation] = messages[result.status] ?? ['Pedido em análise', 'Aguarde a atualização do status.'];
+    status.textContent = heading;
+    status.dataset.approved = String(result.status === 'approved');
+    detail.textContent = explanation;
+    const lines: PurchaseItem[] = result.items.length ? result.items : [{ id: result.id, title: result.title, grant: null }];
+    items.replaceChildren(...lines.map((item) => {
+      const row = template.content.cloneNode(true) as DocumentFragment;
+      row.querySelector('h3')!.textContent = item.title;
+      if (item.image) {
+        const image = row.querySelector('img')!;
+        image.addEventListener('load', () => { image.hidden = false; }, { once: true });
+        image.src = item.image;
+      }
+      if (item.grant) {
+        row.querySelector('form')!.hidden = false;
+        row.querySelector<HTMLInputElement>('[name="grant"]')!.value = item.grant;
+        row.querySelector<HTMLInputElement>('[name="item"]')!.value = item.id;
+        row.querySelector('button')!.setAttribute('aria-label', `Baixar ${item.title}`);
+      }
+      return row;
+    }));
+    order.hidden = false;
+    if (result.status === 'approved') {
+      const cart = readCart();
+      const remaining = cart.filter(({ sku }) => !result.items.some((item) => item.sku === sku));
+      if (remaining.length !== cart.length) writeCart(remaining);
+    }
+  }
+
+  async function load(update = false, recoveryCode?: string) {
+    if (refresh.disabled) return;
+    refresh.disabled = submit.disabled = true;
+    recoveryStatus.textContent = '';
+    let updateFailed = false;
     try {
+      if (recoveryCode !== undefined) {
+        recoveryStatus.textContent = 'Consultando o código…';
+        const response = await fetch('/compras/api/recuperar', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ code: recoveryCode }),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          recoveryStatus.textContent = result.error ?? 'Não foi possível recuperar o pedido.';
+          return;
+        }
+        code.value = '';
+        recoveryStatus.textContent = '';
+        expected = result.id;
+        history.replaceState(null, '', '/compras/');
+        order.hidden = true;
+      }
+
+      notice.textContent = update ? 'Atualizando o pagamento…' : 'Consultando seu pedido…';
       if (update) {
-        const checked = await fetch('/compras/api/atualizar', { method: 'POST' });
-        if (!checked.ok) throw new Error('Falha na atualização');
+        updateFailed = await fetch('/compras/api/atualizar', { method: 'POST' })
+          .then((response) => !response.ok).catch(() => true);
       }
       const query = expected ? `?pedido=${encodeURIComponent(expected)}` : '';
       const response = await fetch(`/compras/api/pedido${query}`);
       const result = await response.json();
       if (!response.ok) {
-        title.textContent = '';
-        orderLabel.hidden = true;
-        refresh.hidden = true;
-        status.textContent = result.error ?? 'Use seu código para consultar o pedido.';
+        order.hidden = true;
+        notice.textContent = response.status === 401
+          ? 'Use o código de recuperação para consultar um pedido.'
+          : result.error ?? 'Não foi possível consultar o pedido.';
         return;
       }
-      title.textContent = result.title;
-      orderLabel.textContent = 'Pedido ' + result.id;
-      orderLabel.hidden = false;
-      status.textContent = messages[result.status] ?? 'Pedido em análise.';
-      refresh.hidden = false;
-      const items = Array.isArray(result.items) ? result.items : [];
-      for (const item of items) {
-        if (!item.grant) continue;
-        const form = document.createElement('form');
-        form.method = 'post'; form.action = '/compras/api/download';
-        const grant = document.createElement('input'); grant.type = 'hidden'; grant.name = 'grant'; grant.value = item.grant;
-        const itemId = document.createElement('input'); itemId.type = 'hidden'; itemId.name = 'item'; itemId.value = item.id;
-        const button = document.createElement('button'); button.className = 'action'; button.type = 'submit'; button.textContent = 'Baixar ' + item.title;
-        form.append(grant,itemId,button);
-        downloads.append(form);
-      }
-      downloads.hidden = downloads.childElementCount === 0;
-      if (result.status === 'approved' && items.length) {
-        try {
-          const cart = JSON.parse(localStorage.getItem('mario-store-cart-v1') ?? '[]');
-          if (Array.isArray(cart)) localStorage.setItem('mario-store-cart-v1',JSON.stringify(cart.filter((entry: StoredItem) => !items.some((item: PurchaseItem) => item.sku === entry.sku))));
-        } catch {}
-      }
+      render(result);
+      notice.textContent = updateFailed ? 'Exibindo o último status disponível. Tente atualizar novamente.' : '';
     } catch {
-      status.textContent = 'Não foi possível consultar agora. Tente novamente.';
+      if (recoveryStatus.textContent) recoveryStatus.textContent = 'Não foi possível conferir o código. Tente novamente.';
+      else notice.textContent = 'Não foi possível consultar agora. Tente novamente.';
     } finally {
-      refresh.disabled = false;
+      refresh.disabled = submit.disabled = false;
     }
   }
 
   refresh.addEventListener('click', () => void load(true));
-  recover.addEventListener('submit', async (event) => {
+  recover.addEventListener('submit', (event) => {
     event.preventDefault();
-    status.textContent = 'Recuperando sua compra…';
-    try {
-      const response = await fetch('/compras/api/recuperar', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ code: code.value.trim().toLowerCase() }),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        status.textContent = result.error ?? 'Não foi possível recuperar a compra.';
-        return;
-      }
-      code.value = '';
-      expected = result.id;
-      history.replaceState(null, '', '/compras/');
-      await load(true);
-    } catch {
-      status.textContent = 'Não foi possível recuperar agora. Tente novamente.';
-    }
+    void load(true, code.value.trim().toLowerCase());
   });
-
   recover.hidden = false;
   void load(Boolean(expected));
 </script>
+
+<style>
+  .back-link { margin-bottom: .5rem; }
+  .orders-heading { padding-block: .2rem 1.2rem; border-bottom: 1px solid var(--line); margin-bottom: 1.25rem; }
+  .orders-heading p { color: var(--muted); margin-top: .45rem; }
+  .orders-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 27%); gap: 1.25rem; align-items: start; }
+  .order-card { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: .65rem; background: var(--surface); }
+  .order-notice { padding: 1.1rem 1.25rem; color: var(--muted); }
+  .order-notice:empty, #recovery-status:empty { display: none; }
+  .order-meta { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: .75rem 1.75rem; padding: 1rem 1.25rem; background: var(--mat); border-bottom: 1px solid var(--line); }
+  .order-meta dt { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+  .order-meta dd { font-size: .875rem; font-weight: 600; }
+  .order-id { text-align: right; overflow-wrap: anywhere; }
+  .order-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; align-items: start; padding: 1.25rem; }
+  .order-status h2 { font-size: 1.3rem; font-weight: 650; }
+  .order-status h2[data-approved="true"] { color: var(--accent); }
+  .order-status p, .order-item-name p, .order-help p { color: var(--muted); font-size: .875rem; }
+  .secondary-action { padding-inline: 1rem; border: 1px solid var(--line); border-radius: 100px; justify-content: center; font-size: .875rem; font-weight: 650; }
+  .secondary-action:hover { border-color: var(--accent); color: var(--accent); }
+  .order-items { grid-column: 1 / -1; }
+  .order-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .9rem; padding-block: .9rem; border-top: 1px solid var(--line); }
+  .order-item:last-child { padding-bottom: 0; }
+  .order-item-icon { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; overflow: hidden; border-radius: .45rem; background: var(--mat); color: var(--accent); }
+  .order-item-icon img { width: 100%; height: 100%; object-fit: contain; }
+  .order-item-icon img:not([hidden]) + svg { display: none; }
+  .order-item-name { overflow-wrap: anywhere; }
+  .order-item-name h3, .order-help :is(h2, h3), .order-help label { font-weight: 650; }
+  .order-help { padding: 1.25rem; }
+  .order-help h2 { font-size: 1.125rem; margin-bottom: .4rem; }
+  #purchase-recover { margin-top: 1rem; }
+  #purchase-recover label { display: block; font-size: .875rem; margin-bottom: .35rem; }
+  #purchase-recover input { border-radius: .4rem; }
+  #purchase-recover .action { width: 100%; justify-content: center; margin-top: .65rem; }
+  #recovery-status { margin-top: .5rem; }
+  .order-support { margin-top: 1rem; padding-top: .85rem; border-top: 1px solid var(--line); font-size: .875rem; }
+  button:enabled { cursor: pointer; }
+  button:disabled { opacity: .6; }
+  @media (max-width: 52rem) {
+    .orders-layout { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 38rem) {
+    .order-meta { grid-template-columns: 1fr 1fr; }
+    .order-id { grid-column: 1 / -1; text-align: start; }
+    .order-body { grid-template-columns: minmax(0, 1fr); }
+    .secondary-action { justify-self: start; }
+    .order-item { grid-template-columns: auto minmax(0, 1fr); }
+    .order-item form { grid-column: 2; }
+  }
+</style>

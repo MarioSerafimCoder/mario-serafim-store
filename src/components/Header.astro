@@ -16,6 +16,17 @@ const current = (href: string) =>
       {site.nav.filter(({ href }) => href !== '/sobre/').map((item) => (
         <a href={item.href} aria-current={current(item.href)} class="tap">{item.href === '/produtos/' ? 'Catálogo' : item.label}</a>
       ))}
+      <a href="/carrinho/" aria-current={current('/carrinho/')} class="tap cart-link" aria-label="Carrinho, 0 produtos">
+        <span class="cart-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 5h2l4 12h10l3-9" />
+            <circle cx="7" cy="21" r="1" />
+            <circle cx="17" cy="21" r="1" />
+          </svg>
+          <span data-cart-count>0</span>
+        </span>
+        Carrinho
+      </a>
     </nav>
     <button type="button" class="theme-switch" id="theme-switch" hidden>
       <svg viewBox="0 0 20 20" width="17" height="17" fill="none" aria-hidden="true">
@@ -26,3 +37,41 @@ const current = (href: string) =>
     </button>
   </div>
 </header>
+
+<script>
+  import { onCartChange, productCount, readCart } from '../lib/cart';
+
+  const badge = document.querySelector('[data-cart-count]');
+  if (badge) {
+    const update = () => {
+      const count = readCart().length;
+      badge.textContent = String(count);
+      badge.closest('a')?.setAttribute('aria-label', `Carrinho, ${productCount(count)}`);
+    };
+    onCartChange(update);
+    update();
+  }
+</script>
+
+<style>
+  .cart-link { gap: .55rem; }
+  .cart-icon { position: relative; display: inline-flex; }
+  .cart-icon span {
+    position: absolute;
+    inset-block-start: -.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: grid;
+    place-items: center;
+    min-width: 1rem;
+    height: 1rem;
+    padding-inline: .15rem;
+    border-radius: 100px;
+    background: var(--surface);
+    color: var(--accent);
+    font-size: .72rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+</style>

@@ -83,9 +83,15 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
     const html = await read(page);
     assert.match(html, /<html lang="pt-BR">/);
     assert.match(html, /<script id="store-theme">/);
-    const withoutTheme = html.replace(/<script id="store-theme">[\s\S]*?<\/script>/, '');
-    assert.doesNotMatch(withoutTheme, /<script\b|<form\b|data-add-to-cart|isle.thorne|newsletter/i);
+    assert.match(html, /href="\/carrinho\/"[^>]+aria-label="Carrinho, 0 produtos"/);
+    const withoutHeaderScripts = html.replace(/<script id="store-theme">[\s\S]*?<\/script>/, '')
+      .replace(/<script type="module" src="\/_astro\/Header\.astro_[^"]+"><\/script>/, '');
+    assert.doesNotMatch(withoutHeaderScripts, /<script\b|<form\b|data-add-to-cart|isle.thorne|newsletter/i);
   }
+  const cart = await read('carrinho/index.html');
+  assert.match(cart, /name="robots" content="noindex"/);
+  assert.match(cart, /Carrinho de compras/);
+  assert.match(cart, /id="basket-checkout"/);
   assert.match(await read('produtos/index.html'), /catálogo ainda está vazio/);
   for (const page of ['termos/index.html', 'privacidade/index.html', 'licencas/index.html', 'reembolsos/index.html', '404.html']) {
     assert.match(await read(page), /name="robots" content="noindex"/);
@@ -109,6 +115,7 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
   build();
   const catalog = await read('produtos/index.html');
   const alpha = await read('produtos/fixture-alpha/index.html');
+  assert.match(JSON.parse(await read('catalogo-compras.json'))[0].image, /^\/_astro\/.*\.webp$/);
   const beta = await read('produtos/fixture-beta/index.html');
   const sitemap = await read('sitemap-0.xml');
   assert.match(catalog, /id="catalog-category"/);

@@ -163,7 +163,9 @@ test('admin verifica identidade, protege mutações e mantém catálogo e pedido
 
 test('checkout usa o preço e a versão do D1 e rejeita cotação antiga', async (t) => {
   const { raw, binding } = database(t);
-  raw.prepare("INSERT INTO products(sku,slug,name,category,price_cents,version,status,details) VALUES('ART-1','arte','Arte','Template',2500,'1','published','{}')").run();
+  const image = 'https://store.example/arte.webp';
+  raw.prepare("INSERT INTO products(sku,slug,name,category,price_cents,version,status,details) VALUES('ART-1','arte','Arte','Template',2500,'1','published',?)")
+    .run(JSON.stringify({ images: [{ src: image }] }));
   raw.prepare("INSERT INTO fulfillment VALUES('ART-1','1','private/version-1','produto.zip',1)").run();
   const env = { DB: binding, DYNAMIC_CATALOG:'true', CHECKOUT_ENABLED:'true', STORE_ORIGIN:origin, MP_MODE:'test', MP_SELLER_ID:'123',
     MP_ACCESS_TOKEN:'fixture', MP_WEBHOOK_SECRET:'fixture', STORE_SESSION_SECRET:'fixture-not-a-real-session-secret-32',
@@ -182,8 +184,13 @@ test('checkout usa o preço e a versão do D1 e rejeita cotação antiga', async
     method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({sku:'ART-1',code,expectedPriceCents}),
   }),env);
   assert.equal((await start(100)).status,412);
-  assert.equal((await start(2500)).status,200);
+  const checkout = await start(2500);
+  assert.equal(checkout.status,200);
+  const cookie = checkout.headers.get('set-cookie').split(';')[0];
+  const purchase = async () => (await commerce.fetch(new Request(origin+'/compras/api/pedido',{headers:{cookie}}),env)).json();
+  assert.equal((await purchase()).items[0].image, image);
   raw.prepare("UPDATE products SET status='archived',price_cents=5000 WHERE sku='ART-1'").run();
+  assert.equal((await purchase()).items[0].image, undefined);
   const order = raw.prepare('SELECT price_cents,object_key FROM orders').get();
   assert.equal(order.price_cents,2500);
   assert.equal(order.object_key,'private/version-1');

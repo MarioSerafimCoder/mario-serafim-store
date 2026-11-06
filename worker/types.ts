@@ -31,6 +31,7 @@ export interface Env {
 export interface Product {
   sku: string;
   name: string;
+  image?: string;
   priceCents: number;
   currency: 'BRL';
   version: string;

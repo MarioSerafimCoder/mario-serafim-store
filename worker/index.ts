@@ -90,6 +90,25 @@ async function session(request: Request, env: Ready) {
   return order ? { kind: 'order', order } satisfies PurchaseSession : null;
 }
 
+async function staticCatalog(env: Ready): Promise<Product[]> {
+  const response = await env.ASSETS.fetch(new Request(`${env.STORE_ORIGIN}/catalogo-compras.json`));
+  return response.ok ? await response.json() as Product[] : [];
+}
+
+async function orderImages(env: Ready, skus: string[]) {
+  if (!skus.length) return new Map<string, string>();
+  if (env.DYNAMIC_CATALOG === 'true') {
+    const { results } = await env.DB.prepare(`
+      SELECT sku, json_extract(details, '$.images[0].src') AS image
+      FROM products WHERE status IN ('published', 'coming_soon')
+      AND sku IN (${skus.map(() => '?').join(',')})
+    `).bind(...skus).all<{ sku: string; image: string | null }>();
+    return new Map(results.flatMap(({ sku, image }) => image ? [[sku, image] as const] : []));
+  }
+  const catalog = await staticCatalog(env);
+  return new Map(catalog.flatMap(({ sku, image }) => image && skus.includes(sku) ? [[sku, image] as const] : []));
+}
+
 async function available(env: Ready, sku: string) {
   if (env.CHECKOUT_ENABLED !== 'true' || !env.MP_WEBHOOK_SECRET || !env.FILES || sku.startsWith('DEMO-')) return null;
   if (env.DYNAMIC_CATALOG === 'true') {
@@ -98,9 +117,7 @@ async function available(env: Ready, sku: string) {
     const { object_key, filename, ...product } = offer;
     return { product, file: { object_key, filename } };
   }
-  const res = await env.ASSETS.fetch(new Request(`${env.STORE_ORIGIN}/catalogo-compras.json`));
-  if (!res.ok) return null;
-  const catalog = await res.json() as Product[];
+  const catalog = await staticCatalog(env);
   const product = catalog.find((entry) => entry.sku === sku);
   if (!product || !Number.isSafeInteger(product.priceCents) || product.priceCents <= 0 || product.currency !== 'BRL') return null;
   const file = await env.DB.prepare('SELECT object_key, filename FROM fulfillment WHERE sku = ? AND version = ? AND enabled = 1')
@@ -501,16 +518,20 @@ async function handle(request: Request, env: Env): Promise<Response> {
     if (purchase.kind === 'cart') {
       const { results } = await env.DB.prepare('SELECT id,title,sku,status FROM orders WHERE cart_id=? ORDER BY cart_position')
         .bind(purchase.cart.id).all<{id:string;title:string;sku:string;status:string}>();
+      const images = await orderImages(env, results.map(({ sku }) => sku)).catch(() => undefined);
       const items = await Promise.all(results.map(async (item) => ({
-        id:item.id,title:item.title,sku:item.sku,grant:item.status==='approved'
+        id:item.id,title:item.title,sku:item.sku,image:images?.get(item.sku),grant:item.status==='approved'
           ? `${expiry}.${await signature(env.STORE_SESSION_SECRET,`download:${item.id}.${expiry}`)}` : null,
       })));
-      return json({id,title:items.map(({title})=>title).join(' · '),status:purchase.cart.status,items});
+      return json({id,title:items.map(({title})=>title).join(' · '),status:purchase.cart.status,
+        createdAt:purchase.cart.created_at,totalCents:purchase.cart.total_cents,items});
     }
     const order = purchase.order;
+    const images = await orderImages(env, [order.sku]).catch(() => undefined);
     const grant = order.status === 'approved' ? `${expiry}.${await signature(env.STORE_SESSION_SECRET, `download:${order.id}.${expiry}`)}` : null;
     return json({ id: order.id, title: order.title, status: order.status, grant,
-      items:[{id:order.id,title:order.title,sku:order.sku,grant}] });
+      createdAt: order.created_at, totalCents: order.price_cents,
+      items:[{id:order.id,title:order.title,sku:order.sku,image:images?.get(order.sku),grant}] });
   }
   if (route === '/compras/api/atualizar' && request.method === 'POST') {
     if (purchase.kind === 'cart' && purchase.cart.remote_id) await refreshCart(env,purchase.cart);

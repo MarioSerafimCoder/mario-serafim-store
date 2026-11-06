@@ -4,7 +4,7 @@ export const site = {
   description: 'Catálogo de produtos digitais de Mário Serafim.',
   nav: [
     { label: 'Produtos', href: '/produtos/' },
-    { label: 'Minha compra', href: '/compras/' },
+    { label: 'Pedidos', href: '/compras/' },
     { label: 'Sobre', href: '/sobre/' },
     { label: 'Licenças', href: '/licencas/' },
   ],
@@ -12,7 +12,7 @@ export const site = {
     store: [
       { label: 'Produtos', href: '/produtos/', external: false },
       { label: 'Sobre', href: '/sobre/', external: false },
-      { label: 'Minha compra', href: '/compras/', external: false },
+      { label: 'Pedidos', href: '/compras/', external: false },
       { label: 'Portfólio', href: 'https://marioserafim.com.br', external: true },
     ],
     help: [

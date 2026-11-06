@@ -149,6 +149,8 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   await notify();
   const approved = await state();
   assert.equal(approved.status, 'approved');
+  assert.equal(approved.totalCents, 1299);
+  assert.ok(Number.isSafeInteger(approved.createdAt));
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM order_events WHERE kind = 'payment_status' AND status = 'approved'").get().n, 1);
 
   const file = () => new URLSearchParams({ grant: approved.grant });
@@ -245,6 +247,8 @@ test('carrinho valida todos os itens, cria uma única order e entrega cada arqui
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM orders WHERE cart_id=?').get(checkout.id).n,2);
   const state=await (await call(api+'/pedido')).json();
   assert.equal(state.status,'created');
+  assert.equal(state.totalCents,2099);
+  assert.ok(Number.isSafeInteger(state.createdAt));
   assert.equal(state.items.length,2);
   assert.ok(state.items.every((item)=>item.grant===null));
 

@@ -49,13 +49,13 @@ const canOfferCheckout = !preview && status === 'published' && priceCents > 0 &&
             : <p class="product-price">{formatPrice(priceCents)}</p>}
         </div>
         {canOfferCheckout ? (
-          <CheckoutAction sku={sku} name={name} slug={slug} priceCents={priceCents} dynamic={dynamic} />
+          <CheckoutAction sku={sku} name={name} slug={slug} priceCents={priceCents} dynamic={dynamic} image={images[0]} />
         ) : (
           <p class="purchase-state"><span class="signal" aria-hidden="true"></span>{status === 'coming_soon' ? 'Este produto ainda não está disponível.' : 'Compra indisponível nesta etapa.'}</p>
         )}
         {canOfferCheckout && <div class="purchase-notes">
-          <p><span aria-hidden="true">↗</span> Ao comprar, você segue para o Mercado Pago. O pedido aparece em Minha compra após a confirmação.</p>
-          <p><span aria-hidden="true">↓</span> Arquivos disponíveis para download ficam em Minha compra.</p>
+          <p><span aria-hidden="true">↗</span> Ao comprar, você segue para o Mercado Pago. O pedido aparece em Pedidos após a confirmação.</p>
+          <p><span aria-hidden="true">↓</span> Arquivos disponíveis para download ficam em Pedidos.</p>
           <nav aria-label="Informações da compra" class="purchase-help-links">
             <a href="/licencas/" class="text-link tap">Licença de uso</a>
             <a href="/entrega-digital/" class="text-link tap">Entrega digital</a>

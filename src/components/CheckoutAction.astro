@@ -1,16 +1,23 @@
 ---
+import { getImage } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
 interface Props {
   sku: string;
   name: string;
   slug: string;
   priceCents: number;
   dynamic: boolean;
+  image?: { src: ImageMetadata | string };
 }
 
-const { sku, name, slug, priceCents, dynamic } = Astro.props;
+const { sku, name, slug, priceCents, dynamic, image } = Astro.props;
+const thumbnail = typeof image?.src === 'string' ? image.src : image
+  ? (await getImage({ src: image.src, width: Math.min(image.src.width, 240), format: 'webp' })).src
+  : undefined;
 ---
 
-<store-checkout data-sku={sku} data-name={name} data-slug={slug} data-price-cents={priceCents} data-dynamic={String(dynamic)}>
+<store-checkout data-sku={sku} data-name={name} data-slug={slug} data-price-cents={priceCents} data-dynamic={String(dynamic)} data-image={thumbnail}>
   <p class="purchase-state"><span class="signal" aria-hidden="true"></span>Compra indisponível nesta etapa.</p>
   <div class="checkout-actions" data-actions hidden>
     <button type="button" class="action" data-checkout>Comprar agora</button>
@@ -24,32 +31,12 @@ const { sku, name, slug, priceCents, dynamic } = Astro.props;
     </div>
   </section>
   <p role="status" aria-live="polite"></p>
-  <section class="cart-panel" data-cart hidden aria-label="Seu carrinho">
-    <div class="cart-title-row"><h3>Seu carrinho</h3><span data-cart-count>0 itens</span></div>
-    <ul data-cart-items></ul>
-    <p class="cart-total" data-cart-total></p>
-    <p class="cart-warning" data-cart-warning hidden></p>
-    <button type="button" class="action" data-cart-checkout>Finalizar compra</button>
-  </section>
+  <a class="text-link cart-open" href="/carrinho/" data-open-cart hidden>Ver carrinho →</a>
 </store-checkout>
 
 <script>
-  type BasketItem = { sku: string; name: string; slug: string; priceCents: number; coupon?: string; expectedTotalCents?: number };
-  const cartKey = 'mario-store-cart-v1';
-
-  function readCart(): BasketItem[] {
-    try {
-      const items = JSON.parse(localStorage.getItem(cartKey) ?? '[]');
-      return Array.isArray(items) ? items.filter((item) => item && typeof item.sku === 'string' &&
-        typeof item.name === 'string' && typeof item.slug === 'string' && Number.isSafeInteger(item.priceCents)) : [];
-    } catch { return []; }
-  }
-
-  function writeCart(items: BasketItem[]) {
-    try { localStorage.setItem(cartKey, JSON.stringify(items)); } catch {}
-  }
-
-  const money = (amount: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount / 100);
+  import { getAvailability, readCart, writeCart } from '../lib/cart';
+  import { formatPrice } from '../lib/format';
 
   class StoreCheckout extends HTMLElement {
     async connectedCallback() {
@@ -65,16 +52,10 @@ const { sku, name, slug, priceCents, dynamic } = Astro.props;
       const quoteButton = couponBox?.querySelector<HTMLButtonElement>('button');
       const notice = this.querySelector<HTMLElement>('.purchase-state');
       const status = this.querySelector<HTMLElement>('[role="status"]');
-      const cartPanel = this.querySelector<HTMLElement>('[data-cart]');
-      const list = this.querySelector<HTMLUListElement>('[data-cart-items]');
-      const total = this.querySelector<HTMLElement>('[data-cart-total]');
-      const count = this.querySelector<HTMLElement>('[data-cart-count]');
-      const warning = this.querySelector<HTMLElement>('[data-cart-warning]');
-      const cartButton = this.querySelector<HTMLButtonElement>('[data-cart-checkout]');
-      if (!sku || !name || !slug || !actions || !addButton || !buyButton || !notice || !status || !cartPanel || !list || !total || !count || !warning || !cartButton) return;
+      const cartLink = this.querySelector<HTMLElement>('[data-open-cart]');
+      if (!sku || !name || !slug || !actions || !addButton || !buyButton || !notice || !status || !cartLink) return;
 
-      const availability = await fetch(`/compras/api/disponibilidade?sku=${encodeURIComponent(sku)}`)
-        .then((response) => response.ok ? response.json() : null).catch(() => null);
+      const availability = await getAvailability(sku);
       const dynamic = this.dataset.dynamic === 'true';
       const available = availability?.available === true && (!dynamic || availability.priceCents === priceCents);
       if (!available) {
@@ -101,62 +82,25 @@ const { sku, name, slug, priceCents, dynamic } = Astro.props;
             if (couponField.value.trim() !== coupon) return;
             if (!response.ok) { status.textContent = result.error; return; }
             discount = { coupon: result.coupon, totalCents: result.totalCents };
-            status.textContent = 'Total com desconto: ' + money(result.totalCents) + '.';
+            status.textContent = 'Total com desconto: ' + formatPrice(result.totalCents) + '.';
           } catch { status.textContent = 'Não foi possível conferir o cupom.'; }
           finally { quotePending = quoteButton.disabled = false; }
         });
       }
 
-      const renderCart = async () => {
-        const cart = readCart();
-        list.replaceChildren();
-        count.textContent = `${cart.length} ${cart.length === 1 ? 'item' : 'itens'}`;
-        const totalCents = cart.reduce((sum, item) => sum + (item.expectedTotalCents ?? item.priceCents), 0);
-        total.textContent = cart.length ? 'Total ' + money(totalCents) : 'Seu carrinho está vazio.';
-        cart.forEach((item) => {
-          const li = document.createElement('li');
-          const link = document.createElement('a');
-          link.href = `/produtos/${encodeURIComponent(item.slug)}/`;
-          link.textContent = item.name;
-          const price = document.createElement('span');
-          price.textContent = money(item.expectedTotalCents ?? item.priceCents);
-          const remove = document.createElement('button');
-          remove.type = 'button'; remove.className = 'text-link'; remove.textContent = 'Remover';
-          remove.setAttribute('aria-label', `Remover ${item.name} do carrinho`);
-          remove.addEventListener('click', () => { writeCart(readCart().filter((entry) => entry.sku !== item.sku)); void renderCart(); });
-          li.append(link, price, remove);
-          list.append(li);
-        });
-        warning.hidden = true;
-        cartButton.disabled = cart.length === 0;
-        cartPanel.hidden = cart.length === 0;
-        if (cart.length) {
-          const checks = await Promise.all(cart.map((item) => fetch(`/compras/api/disponibilidade?sku=${encodeURIComponent(item.sku)}`)
-            .then((response) => response.ok ? response.json() : null).catch(() => null)));
-          const invalid = cart.some((item, index) => checks[index]?.available !== true ||
-            (checks[index]?.priceCents !== undefined && checks[index].priceCents !== item.priceCents));
-          if (invalid) {
-            warning.textContent = 'Um produto do carrinho está indisponível ou teve o preço alterado. Atualize o carrinho antes de comprar.';
-            warning.hidden = false;
-            cartButton.disabled = true;
-          }
-        }
-      };
-
       actions.hidden = false;
       notice.hidden = true;
-      await renderCart();
 
-      addButton.addEventListener('click', async () => {
+      addButton.addEventListener('click', () => {
         if (quotePending) return;
         if (couponField?.value.trim() && !discount) { status.textContent = 'Confira o cupom ou limpe o campo antes de adicionar.'; return; }
         const cart = readCart().filter((item) => item.sku !== sku);
         if (cart.length >= 10) { status.textContent = 'O carrinho aceita até 10 produtos diferentes.'; return; }
-        cart.push({ sku, name, slug, priceCents, ...(discount ? { coupon: discount.coupon, expectedTotalCents: discount.totalCents } : {}) });
-        writeCart(cart);
+        cart.push({ sku, name, slug, priceCents, image: this.dataset.image,
+          ...(discount ? { coupon: discount.coupon, expectedTotalCents: discount.totalCents } : {}) });
+        if (!writeCart(cart)) { status.textContent = 'Não foi possível salvar o carrinho neste navegador.'; return; }
         status.textContent = 'Adicionado ao carrinho.';
-        await renderCart();
-        cartPanel.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+        cartLink.hidden = false;
       });
 
       let pending = false;
@@ -179,29 +123,6 @@ const { sku, name, slug, priceCents, dynamic } = Astro.props;
         } catch { status.textContent = 'Não foi possível conectar. Tente novamente nesta mesma aba.'; }
         finally { pending = buyButton.disabled = false; }
       });
-
-      cartButton.addEventListener('click', async () => {
-        if (pending) return;
-        const cart = readCart();
-        if (!cart.length) return;
-        pending = cartButton.disabled = true;
-        status.textContent = 'Preparando seu carrinho…';
-        const fingerprint = cart.map((item) => [item.sku,item.priceCents,item.coupon ?? '',item.expectedTotalCents ?? ''].join(':')).join('|');
-        const key = 'store-cart-checkout:' + fingerprint;
-        let code: string = crypto.randomUUID();
-        try { code = sessionStorage.getItem(key) ?? code; sessionStorage.setItem(key, code); } catch {}
-        try {
-          const response = await fetch('/compras/api/checkout-carrinho', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ code, items: cart.map((item) => ({ sku: item.sku, expectedPriceCents: item.priceCents,
-              ...(item.coupon ? { coupon: item.coupon, expectedTotalCents: item.expectedTotalCents } : {}) })) }),
-          });
-          const result = await response.json();
-          if (!response.ok) { status.textContent = result.error ?? 'Tente novamente.'; return; }
-          window.location.assign(result.checkoutUrl);
-        } catch { status.textContent = 'Não foi possível iniciar o pagamento do carrinho. Tente novamente.'; }
-        finally { pending = cartButton.disabled = false; }
-      });
     }
   }
 
@@ -213,17 +134,7 @@ const { sku, name, slug, priceCents, dynamic } = Astro.props;
   .cart-add { display: inline-flex; min-height: 3rem; align-items: center; justify-content: center; padding: .65rem 1rem; border: 1px solid var(--line); border-radius: 100px; color: var(--ink); font-weight: 650; cursor: pointer; }
   .cart-add:hover { border-color: var(--accent); color: var(--accent); }
   .coupon-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .6rem; }
-  .cart-panel { display: grid; gap: .65rem; padding-top: .8rem; border-top: 1px solid var(--line); }
-  .cart-title-row { display: flex; justify-content: space-between; gap: 1rem; font-size: .9rem; }
-  .cart-title-row h3 { font-weight: 650; }
-  .cart-title-row span { color: var(--muted); font-size: .8rem; }
-  .cart-panel ul { display: grid; gap: .5rem; }
-  .cart-panel li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name price" ". remove"; align-items: start; gap: .25rem .75rem; padding-block: .55rem; border-bottom: 1px solid var(--line); font-size: .875rem; }
-  .cart-panel li a { grid-area: name; min-width: 0; overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: .15em; }
-  .cart-panel li > span { grid-area: price; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .cart-panel li button { grid-area: remove; justify-self: end; min-height: 40px; padding-inline: .4rem; font-size: .78rem; }
-  .cart-total { justify-self: end; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .cart-warning { color: var(--muted); font-size: .82rem; }
+  .cart-open { justify-self: start; }
   [role="status"]:empty { display: none; }
   button:enabled { cursor: pointer; }
   button:disabled { opacity: .7; }

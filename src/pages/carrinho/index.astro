@@ -1,0 +1,213 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Carrinho de compras" noindex>
+  <a href="/produtos/" class="text-link tap back-link">← Voltar ao catálogo</a>
+  <div class="basket-layout">
+    <section class="basket-card" aria-labelledby="basket-heading">
+      <h1 class="display" id="basket-heading" tabindex="-1">Carrinho de compras</h1>
+      <noscript><p>Ative o JavaScript para acessar seu carrinho.</p></noscript>
+      <p id="basket-empty" hidden>Seu carrinho está vazio. <a href="/produtos/" class="text-link">Explorar o catálogo</a></p>
+      <div id="basket-products" hidden>
+        <div class="basket-toolbar">
+          <button type="button" class="text-link tap" id="basket-select"></button>
+          <span>Preço</span>
+        </div>
+        <ul id="basket-items"></ul>
+      </div>
+    </section>
+    <aside class="basket-card basket-summary" id="basket-summary" aria-labelledby="basket-summary-heading" hidden>
+      <h2 id="basket-summary-heading">Resumo do pedido</h2>
+      <p class="basket-subtotal" aria-live="polite"><span id="basket-subtotal-label"></span><strong id="basket-total"></strong></p>
+      <button type="button" class="action" id="basket-checkout" disabled>Finalizar compra</button>
+      <p class="basket-note">Pagamento pelo Mercado Pago. Os arquivos ficam disponíveis em Pedidos após a confirmação.</p>
+      <p class="basket-note" id="basket-availability" role="status"></p>
+      <p class="basket-note" id="basket-status" role="status"></p>
+    </aside>
+  </div>
+
+  <template id="basket-row">
+    <li class="basket-row">
+      <input type="checkbox" data-select-item />
+      <img class="basket-image" src="/marca/monograma.png" width="112" height="84" alt="" decoding="async" />
+      <div class="basket-details">
+        <h2><a data-item-link></a></h2>
+        <p>Produto digital <span data-item-coupon></span></p>
+        <button type="button" class="text-link tap" data-remove-item>Remover</button>
+      </div>
+      <strong class="basket-price" data-item-price></strong>
+    </li>
+  </template>
+</BaseLayout>
+
+<script>
+  import { getAvailability, onCartChange, productCount, readCart, writeCart } from '../../lib/cart';
+  import { formatPrice } from '../../lib/format';
+
+  const heading = document.querySelector<HTMLElement>('#basket-heading')!;
+  const empty = document.querySelector<HTMLElement>('#basket-empty')!;
+  const products = document.querySelector<HTMLElement>('#basket-products')!;
+  const list = document.querySelector<HTMLElement>('#basket-items')!;
+  const selectAll = document.querySelector<HTMLButtonElement>('#basket-select')!;
+  const summary = document.querySelector<HTMLElement>('#basket-summary')!;
+  const subtotal = document.querySelector<HTMLElement>('#basket-subtotal-label')!;
+  const total = document.querySelector<HTMLElement>('#basket-total')!;
+  const checkout = document.querySelector<HTMLButtonElement>('#basket-checkout')!;
+  const availability = document.querySelector<HTMLElement>('#basket-availability')!;
+  const status = document.querySelector<HTMLElement>('#basket-status')!;
+  const template = document.querySelector<HTMLTemplateElement>('#basket-row')!;
+  const excluded = new Set<string>();
+  let cart = readCart();
+  let unavailable: Set<string> | undefined;
+  let revision = 0;
+  let pending = false;
+
+  const selectedItems = () => cart.filter(({ sku }) => !excluded.has(sku));
+
+  function updateSummary() {
+    const selected = selectedItems();
+    const checking = selected.length > 0 && !unavailable;
+    const invalid = selected.some(({ sku }) => unavailable?.has(sku));
+    selectAll.textContent = selected.length === cart.length ? 'Desmarcar todos' : 'Selecionar todos';
+    subtotal.textContent = `Subtotal (${productCount(selected.length)})`;
+    total.textContent = formatPrice(selected.reduce((sum, item) => sum + (item.expectedTotalCents ?? item.priceCents), 0));
+    availability.textContent = checking ? 'Conferindo disponibilidade…' : invalid
+      ? 'Um produto selecionado está indisponível ou teve o preço alterado. Desmarque-o ou abra a página do produto para conferir.'
+      : '';
+    checkout.disabled = pending || selected.length === 0 || checking || invalid;
+    selectAll.disabled = pending;
+    list.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button').forEach((control) => {
+      control.disabled = pending;
+    });
+  }
+
+  async function render() {
+    const current = ++revision;
+    cart = readCart();
+    for (const sku of excluded) if (!cart.some((item) => item.sku === sku)) excluded.delete(sku);
+    unavailable = undefined;
+    empty.hidden = cart.length > 0;
+    products.hidden = summary.hidden = cart.length === 0;
+    list.replaceChildren();
+    cart.forEach((item, index) => {
+      const row = template.content.cloneNode(true) as DocumentFragment;
+      const select = row.querySelector<HTMLInputElement>('[data-select-item]')!;
+      const image = row.querySelector<HTMLImageElement>('img')!;
+      const link = row.querySelector<HTMLAnchorElement>('[data-item-link]')!;
+      const remove = row.querySelector<HTMLButtonElement>('[data-remove-item]')!;
+      select.checked = !excluded.has(item.sku);
+      select.setAttribute('aria-label', `Selecionar ${item.name}`);
+      select.addEventListener('change', () => {
+        if (select.checked) excluded.delete(item.sku);
+        else excluded.add(item.sku);
+        status.textContent = '';
+        updateSummary();
+      });
+      if (typeof item.image === 'string' && item.image.startsWith('/') && !/^\/[\/\\]/.test(item.image)) {
+        image.addEventListener('error', () => { image.src = '/marca/monograma.png'; }, { once: true });
+        image.src = item.image;
+      }
+      link.href = `/produtos/${encodeURIComponent(item.slug)}/`;
+      link.textContent = item.name;
+      row.querySelector('[data-item-price]')!.textContent = formatPrice(item.expectedTotalCents ?? item.priceCents);
+      if (item.coupon) row.querySelector('[data-item-coupon]')!.textContent = ` · Cupom ${item.coupon}`;
+      remove.setAttribute('aria-label', `Remover ${item.name} do carrinho`);
+      remove.addEventListener('click', () => {
+        status.textContent = '';
+        if (!writeCart(readCart().filter(({ sku }) => sku !== item.sku))) {
+          status.textContent = 'Não foi possível atualizar o carrinho neste navegador.';
+          return;
+        }
+        const buttons = list.querySelectorAll<HTMLButtonElement>('[data-remove-item]');
+        (buttons[Math.min(index, buttons.length - 1)] ?? heading).focus();
+      });
+      list.append(row);
+    });
+    updateSummary();
+    const invalid = await Promise.all(cart.map(async (item) => {
+      const result = await getAvailability(item.sku);
+      return result?.available !== true || (result.priceCents !== undefined && result.priceCents !== item.priceCents)
+        ? item.sku : null;
+    }));
+    if (current !== revision) return;
+    unavailable = new Set(invalid.filter((sku) => sku !== null));
+    updateSummary();
+  }
+
+  selectAll.addEventListener('click', () => {
+    const deselect = excluded.size === 0;
+    excluded.clear();
+    if (deselect) cart.forEach(({ sku }) => excluded.add(sku));
+    list.querySelectorAll<HTMLInputElement>('[data-select-item]').forEach((input) => { input.checked = !deselect; });
+    status.textContent = '';
+    updateSummary();
+  });
+
+  checkout.addEventListener('click', async () => {
+    if (checkout.disabled) return;
+    const selected = selectedItems();
+    pending = true;
+    updateSummary();
+    status.textContent = 'Preparando seu pedido…';
+    try {
+      const fingerprint = selected.map((item) =>
+        [item.sku, item.priceCents, item.coupon ?? '', item.expectedTotalCents ?? ''].join(':')).join('|');
+      const key = 'store-cart-checkout:' + fingerprint;
+      let code: string = crypto.randomUUID();
+      try { code = sessionStorage.getItem(key) ?? code; sessionStorage.setItem(key, code); } catch {}
+      const response = await fetch('/compras/api/checkout-carrinho', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ code, items: selected.map((item) => ({
+          sku: item.sku, expectedPriceCents: item.priceCents,
+          ...(item.coupon ? { coupon: item.coupon, expectedTotalCents: item.expectedTotalCents } : {}),
+        })) }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        status.textContent = result.error ?? 'Tente novamente.';
+        return;
+      }
+      window.location.assign(result.checkoutUrl);
+    } catch { status.textContent = 'Não foi possível iniciar o pagamento do carrinho. Tente novamente.'; }
+    finally { pending = false; updateSummary(); }
+  });
+
+  onCartChange(render);
+  void render();
+</script>
+
+<style>
+  .back-link { margin-bottom: .75rem; }
+  .basket-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 25%); gap: 1.25rem; align-items: start; }
+  .basket-card { min-width: 0; padding: clamp(1rem, 2.5vw, 1.75rem); background: var(--surface); border: 1px solid var(--line); border-radius: .65rem; }
+  .basket-card h1 { font-size: clamp(1.75rem, 3.5vw, 2.75rem); }
+  #basket-empty { margin-top: 1rem; }
+  .basket-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .5rem; color: var(--muted); font-size: .875rem; }
+  .basket-row { display: grid; grid-template-columns: auto clamp(4rem, 12vw, 7rem) minmax(0, 1fr) auto; align-items: start; gap: 1rem; padding-block: 1.2rem; border-top: 1px solid var(--line); }
+  .basket-row input { align-self: center; width: 1.2rem; height: 1.2rem; accent-color: var(--accent); cursor: pointer; }
+  .basket-image { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; background: var(--mat); border-radius: .4rem; }
+  .basket-details { min-width: 0; overflow-wrap: anywhere; }
+  .basket-details h2 { font-weight: 650; }
+  .basket-details a:hover { text-decoration: underline; }
+  .basket-details p, .basket-details button, .basket-note { color: var(--muted); font-size: .875rem; }
+  .basket-price, .basket-subtotal strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .basket-summary { position: sticky; top: 1rem; }
+  .basket-summary h2 { font-size: 1.1rem; font-weight: 650; }
+  .basket-subtotal { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem .75rem; margin-block: .9rem; }
+  .basket-summary .action { width: 100%; justify-content: center; }
+  .basket-summary button:disabled { opacity: .55; }
+  button:enabled { cursor: pointer; }
+  .basket-note { margin-top: .75rem; }
+  .basket-note:empty { display: none; }
+  @media (max-width: 48rem) {
+    .basket-layout { grid-template-columns: minmax(0, 1fr); }
+    .basket-summary { position: static; }
+  }
+  @media (max-width: 33rem) {
+    .basket-row { grid-template-columns: auto 3.5rem minmax(0, 1fr); gap: .25rem .65rem; }
+    .basket-price { grid-column: 3; }
+    .basket-toolbar > span { display: none; }
+  }
+</style>

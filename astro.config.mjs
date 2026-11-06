@@ -9,7 +9,7 @@ export default defineConfig({
   trailingSlash: 'always',
   integrations: [
     sitemap({
-      filter: (url) => !['/404', '/termos', '/privacidade', '/compras'].includes(
+      filter: (url) => !['/404', '/termos', '/privacidade', '/compras', '/carrinho'].includes(
         new URL(url).pathname.replace(/\/$/, ''),
       ),
     }),
