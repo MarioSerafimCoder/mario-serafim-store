@@ -118,8 +118,9 @@
   .text-link { font-weight: 600; text-decoration: underline; text-underline-offset: .25em; }
   .text-link:hover { color: var(--accent); }
 
-  .store-section { margin-top: clamp(1.35rem, 3vw, 2.5rem); }
-  .store-section + .store-section { padding-top: clamp(1rem, 3vw, 2rem); border-top: 1px solid var(--line); }
+  .store-section { margin-top: clamp(2.5rem, 6vw, 5rem); }
+  .store-section + .store-section { padding-top: clamp(1.5rem, 4vw, 3rem); border-top: 1px solid var(--line); }
+  .page-main:has(> .store-hero) { padding-bottom: clamp(3rem, 7vw, 6rem); }
   .section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: .25rem 1.5rem; margin-bottom: .9rem; }
   .section-title { font-size: clamp(1.5rem, 3vw, 2.25rem); font-weight: 600; line-height: 1.15; letter-spacing: -.035em; }
   .category-list { display: flex; flex-wrap: wrap; gap: .55rem; }
@@ -140,12 +141,12 @@
   .product-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(.9rem, 2vw, 1.5rem); }
   .product-tile { height: 100%; }
   .tile-link { display: flex; height: 100%; flex-direction: column; border: 1px solid var(--line); border-radius: .55rem; background: var(--surface); }
-  @media (hover: hover) and (pointer: fine) {
-    .tile-link:hover { border-color: var(--muted); box-shadow: 0 6px 16px rgb(0 0 0 / .08); }
+  @media (any-hover: hover) {
+    .tile-link:hover { border-color: var(--muted); box-shadow: 0 12px 24px rgb(0 0 0 / .12); }
   }
-  @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-    .tile-link { transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease; }
-    .tile-link:hover { transform: translateY(-2px); }
+  @media (any-hover: hover) and (prefers-reduced-motion: no-preference) {
+    .tile-link { transition: transform 220ms ease-out, box-shadow 220ms ease-out, border-color 220ms ease-out; }
+    .tile-link:hover { transform: translateY(-6px); }
   }
   .tile-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .tile-image { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: var(--mat); border-radius: .5rem .5rem 0 0; }
