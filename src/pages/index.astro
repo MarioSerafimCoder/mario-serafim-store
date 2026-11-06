@@ -47,7 +47,8 @@ const categories = [...new Set(products.map(({ data }) => data.category))].sort(
   )}
 
   <section class="store-section store-benefits" aria-labelledby="benefits">
-    <h2 id="benefits" class="section-title">Escolha com clareza.</h2>
+    <p class="eyebrow">Guia de compra</p>
+    <h2 id="benefits" class="section-title">Antes de escolher</h2>
     <ul>
       <li><strong>Veja o resultado</strong><p>Explore as prévias para avaliar como o recurso se encaixa no projeto.</p></li>
       <li><strong>Confira a compatibilidade</strong><p>Consulte formatos, conteúdo e requisitos de software antes de escolher.</p></li>
@@ -58,7 +59,9 @@ const categories = [...new Set(products.map(({ data }) => data.category))].sort(
   <section class="store-section store-creator" aria-labelledby="author">
     <div><p class="eyebrow">Quem cria os recursos</p><h2 id="author" class="section-title">Mário Serafim</h2></div>
     <p>Mário Serafim é diretor de arte em Fortaleza. A loja reúne recursos digitais ligados à sua prática em identidade visual, branding e experiências digitais.</p>
-    <a class="text-link tap" href="/sobre/">Sobre o criador <span aria-hidden="true">↗</span></a>
-    <a class="text-link tap" href="/contato/">Contato e suporte <span aria-hidden="true">↗</span></a>
+    <div class="creator-links">
+      <a class="action" href="/sobre/">Sobre o criador <span aria-hidden="true">↗</span></a>
+      <a class="text-link tap" href="/contato/">Contato e suporte</a>
+    </div>
   </section>
 </BaseLayout>

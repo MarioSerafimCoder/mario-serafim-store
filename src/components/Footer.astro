@@ -14,7 +14,7 @@ const officialContact = site.officialContact;
         <img src="/marca/monograma.png" width="115" height="57" alt="" loading="lazy" />
         <span class="wordmark-label"><span>Mário Serafim</span><small>Store</small></span>
       </a>
-      <p>© {year} Mário Serafim</p>
+      <p>Recursos digitais para projetos de design.</p>
     </div>
     <nav aria-label="Loja">
       <h2>Loja</h2>
@@ -37,9 +37,10 @@ const officialContact = site.officialContact;
           {settings!.legal_phone && <p>{settings!.legal_phone}</p>}
         </>
       ) : (
-        <p class="identity-pending">Dados cadastrais e endereço aguardam preenchimento e validação antes da abertura comercial.</p>
+        <p class="identity-pending">Dados comerciais em atualização.</p>
       )}
       <a class="tap" href={settings?.support_url || officialContact} target="_blank" rel="noreferrer">Canal oficial de contato <span aria-hidden="true">↗</span></a>
     </section>
   </div>
+  <div class="shell footer-base"><p>© {year} Mário Serafim</p></div>
 </footer>
