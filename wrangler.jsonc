@@ -18,7 +18,7 @@
     "not_found_handling": "404-page"
   },
   "vars": {
-    "CHECKOUT_ENABLED": "false",
+    "CHECKOUT_ENABLED": "true",
     "DYNAMIC_CATALOG": "true",
     "ADMIN_ACCESS_ISSUER": "https://wispy-hall-9782.cloudflareaccess.com",
     "ADMIN_ACCESS_AUD": "deb08711f50495f667abcf014262085c206a4c3ceefe5e39f1cdcb207fdde789",
