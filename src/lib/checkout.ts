@@ -9,4 +9,3 @@ export function checkoutCode(key: string): string {
   try { sessionStorage.setItem(key, code); } catch {}
   return code;
 }
-

@@ -84,9 +84,12 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
     assert.match(html, /<html lang="pt-BR">/);
     assert.match(html, /<script id="store-theme">/);
     assert.match(html, /href="\/carrinho\/"[^>]+aria-label="Carrinho, 0 produtos"/);
-    const withoutHeaderScripts = html.replace(/<script id="store-theme">[\s\S]*?<\/script>/, '')
-      .replace(/<script type="module" src="\/_astro\/Header\.astro_[^"]+"><\/script>/, '');
-    assert.doesNotMatch(withoutHeaderScripts, /<script\b|<form\b|data-add-to-cart|isle.thorne|newsletter/i);
+    assert.match(html, /aria-label="Cookies e privacidade"/);
+    assert.match(html, /data-cookie-accept[^>]*>Aceitar e continuar<\/button>/);
+    const withoutLayoutScripts = html.replace(/<script id="store-theme">[\s\S]*?<\/script>/, '')
+      .replace(/<script type="module" src="\/_astro\/Header\.astro_[^"]+"><\/script>/, '')
+      .replace(/<script type="module">[^<]*store-cookie-notice-v1[^<]*<\/script>/, '');
+    assert.doesNotMatch(withoutLayoutScripts, /<script\b|<form\b|data-add-to-cart|isle.thorne|newsletter/i);
   }
   const cart = await read('carrinho/index.html');
   assert.match(cart, /name="robots" content="noindex"/);
