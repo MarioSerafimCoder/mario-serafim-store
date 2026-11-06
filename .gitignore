@@ -27,3 +27,6 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# Independent Site repository; distributable snapshots are versioned in sites/*.tar.gz.
+/sites/antecipe-novembro/
