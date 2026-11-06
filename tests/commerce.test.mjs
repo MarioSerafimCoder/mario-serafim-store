@@ -90,7 +90,7 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   const start = (body = { sku: product.sku, code }) => call(api + '/checkout', { method: 'POST', body });
   const notify = (valid = true, stamp = Math.floor(Date.now() / 1000)) => {
     const requestId = 'fixture-webhook-request';
-    const signed = `id:${providerId.toLowerCase()};request-id:${requestId};ts:${stamp};`;
+    const signed = `id:${providerId};request-id:${requestId};ts:${stamp};`;
     const signature = createHmac('sha256', signatureSecret).update(signed).digest('hex');
     return call(api + '/webhook?data.id=' + providerId, {
       method: 'POST', session: false,

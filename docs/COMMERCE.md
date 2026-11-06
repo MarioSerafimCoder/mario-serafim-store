@@ -9,7 +9,7 @@ A aplicação `Check-out-pro` usa Checkout Pro com a API de Orders. Use a [docum
 - Execute `npm ci`, `npm run check`, `npm run build` e `npm test`.
 - Use `wrangler d1 migrations apply DB --env homologacao --remote` para aplicar migrations.
 - Publique com `wrangler deploy --env homologacao`. O ambiente começa com `CHECKOUT_ENABLED=false`.
-- No painel Mercado Pago, configure o tópico `orders_v2` no ambiente **Teste** e a URL `https://mario-serafim-store-homologacao.marioserafim-da.workers.dev/compras/api/webhook`.
+- No painel Mercado Pago, configure o evento **Order (Mercado Pago)** no ambiente **Teste** e a URL `https://mario-serafim-store-homologacao.marioserafim-da.workers.dev/compras/api/webhook`.
 - Defina `MP_SELLER_ID` com o ID do vendedor do ambiente. Instale `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` e `STORE_SESSION_SECRET` por `wrangler secret put <NOME> --env homologacao` ou pelo painel da Cloudflare. Use valores distintos em produção. A chave de sessão deve ter pelo menos 32 caracteres aleatórios. Guarde o token no cofre do Worker.
 - Use a credencial de vendedor de teste indicada para **Checkout Pro com Orders** e um comprador de teste separado. Confirme o ID do vendedor, o prefixo da order de teste, o retorno e o webhook com uma compra simulada oficial antes de habilitar produção.
 - Quando o R2 estiver disponível, use um bucket privado exclusivo para homologação e vincule-o como `FILES`. Cadastre um produto de homologação apenas no build desse ambiente, envie seu arquivo ao bucket e habilite o SKU em `fulfillment`. Só então habilite `CHECKOUT_ENABLED` em homologação.
@@ -24,4 +24,4 @@ A aplicação `Check-out-pro` usa Checkout Pro com a API de Orders. Use a [docum
 - Para investigar pedidos, consulte `orders` e `order_events` por ID interno. O status aprovado é o direito de acesso, revogado após estorno ou contestação. O cron reconcilia pedidos recentes e o comprador pode solicitar atualização pelo botão.
 - Para suspender novas vendas, publique `CHECKOUT_ENABLED=false`. Preserve os secrets, as tabelas e os objetos para reconciliação e acesso de compradores existentes. Guarde o identificador do deploy anterior e use rollback do Worker se precisar recuperar a vitrine.
 
-O R2 exige ativação da assinatura na conta. O catálogo real está vazio. A vitrine pública de demonstração segue separada e as simulações automatizadas não substituem os testes oficiais do Mercado Pago.
+O Worker de homologação está publicado com D1 e os quatro valores protegidos `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`, `MP_SELLER_ID` e `STORE_SESSION_SECRET`. O simulador oficial confirmou o recebimento do webhook de teste. A compra de teste com entrega privada segue pendente porque o R2 exige ativação da assinatura na conta. O catálogo real está vazio e a vitrine pública de demonstração segue separada, com vendas desativadas.

@@ -24,7 +24,7 @@ export async function validWebhook(request: Request, secret: string, id: string)
   if (!/^\d{10}(?:\d{3})?$/.test(ts) || !/^[\w-]{1,128}$/.test(requestId)) return false;
   const time = Number(ts) * (ts.length === 10 ? 1000 : 1);
   if (Math.abs(Date.now() - time) > 10 * 60_000) return false;
-  return verifyHmac(secret, `id:${id.toLowerCase()};request-id:${requestId};ts:${ts};`, signature);
+  return verifyHmac(secret, `id:${id};request-id:${requestId};ts:${ts};`, signature);
 }
 
 interface RemoteOrder {
