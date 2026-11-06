@@ -4,10 +4,13 @@ A vitrine Astro e o checkout leem o mesmo catálogo D1 nos Workers publicados. O
 
 A aplicação `Check-out-pro` usa Checkout Pro com a API de Orders. Use a [documentação da integração](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-orders/overview) e a [referência de webhooks](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-orders/notifications?scope=prod).
 
+Nas páginas de produto, **Comprar agora** inicia um pedido individual e redireciona diretamente ao Mercado Pago. **Adicionar ao carrinho** guarda os produtos neste navegador; finalizar o carrinho envia uma única Order, com até dez produtos. O Worker revalida preço, publicação, arquivo privado e cupons de cada linha antes de criar a cobrança. A aprovação e os estornos são conciliados para todas as linhas do carrinho; cada arquivo aprovado continua sendo baixado separadamente em `/compras/`.
+
 ## Homologação
 
 - Execute `npm ci`, `npm run check`, `npm run build` e `npm test`.
 - Use `wrangler d1 migrations apply DB --env homologacao --remote` para aplicar migrations.
+- A migration `0005_cart_checkout.sql` adiciona o registro do pagamento agregado e vincula as linhas do carrinho aos pedidos. Aplique as migrations pendentes antes de publicar esta versão.
 - Publique com `npm run deploy:homologacao`. O ambiente começa com `CHECKOUT_ENABLED=false`.
 - No painel Mercado Pago, configure o evento **Order (Mercado Pago)** no ambiente **Teste** e a URL `https://mario-serafim-store-homologacao.marioserafim-da.workers.dev/compras/api/webhook`.
 - Defina `MP_SELLER_ID` com o ID do vendedor do ambiente. Instale `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` e `STORE_SESSION_SECRET` por `wrangler secret put <NOME> --env homologacao` ou pelo painel da Cloudflare. Use valores distintos em produção. A chave de sessão deve ter pelo menos 32 caracteres aleatórios. Guarde o token no cofre do Worker.
@@ -24,7 +27,7 @@ A aplicação `Check-out-pro` usa Checkout Pro com a API de Orders. Use a [docum
 - Cadastre o arquivo comercial em uma chave imutável por SKU e versão e habilite a linha correspondente em `fulfillment`. Campos obrigatórios são `sku`, `version`, `object_key`, `filename` e `enabled`. Não substitua objetos vinculados a pedidos já criados.
 - Configure os secrets e o ID do vendedor de produção. A URL de webhook de produção é `https://loja.marioserafim.com.br/compras/api/webhook`. A configuração do domínio de produção deve ser mantida no Worker que atende a loja.
 - Antes de habilitar vendas, confirme a homologação oficial, Pix e cartão habilitados na conta, arquivos privados e textos comerciais revisados. Ative `CHECKOUT_ENABLED=true` apenas com produtos reais publicados e entregáveis.
-- O comprador guarda o código de recuperação apresentado antes do redirecionamento e consulta `/compras/`. O Worker valida a sessão, confirma o status novamente no Mercado Pago e serve o arquivo protegido com uma autorização de cinco minutos.
+- O redirecionamento ao Mercado Pago é direto. A chave de recuperação fica armazenada na sessão do navegador; após o retorno, `/compras/` valida a sessão, confirma o status novamente no Mercado Pago e mostra um botão de download individual por arquivo com autorização de cinco minutos.
 - Para investigar pedidos, consulte `orders` e `order_events` por ID interno. O status aprovado é o direito de acesso, revogado após estorno ou contestação. O cron reconcilia pedidos recentes e o comprador pode solicitar atualização pelo botão.
 - Para suspender novas vendas, publique `CHECKOUT_ENABLED=false`. Preserve os secrets, as tabelas e os objetos para reconciliação e acesso de compradores existentes. Guarde o identificador do deploy anterior e use rollback do Worker se precisar recuperar a vitrine.
 

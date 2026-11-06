@@ -9,41 +9,43 @@ interface Props {
 const { images } = Astro.props;
 ---
 
-<store-gallery class="product-gallery" role="region" aria-label="Prévias do produto">
-  <ul class="gallery-views">
+<store-gallery class="product-gallery" role="region" aria-label="Galeria de prévias" tabindex="0">
+  <ul class="gallery-views" aria-live="polite">
     {images.map((image, index) => (
-      <li data-view>
-        <a href={typeof image.src === 'string' ? image.src : image.src.src} class="gallery-preview" data-zoom>
-          <StoreImage
-            image={image}
-            limit={1024}
-            widths={[400, 800, 1024]}
-            sizes="(min-width: 58rem) 48vw, 92vw"
-            loading={index === 0 ? 'eager' : 'lazy'}
-            fetchpriority={index === 0 ? 'high' : 'auto'}
-            class="gallery-image"
-          />
+      <li data-view hidden={index !== 0}>
+        <a href={typeof image.src === 'string' ? image.src : image.src.src} class="gallery-preview" data-zoom aria-label={`Ampliar imagem ${index + 1}: ${image.alt}`}>
+          <StoreImage image={image} limit={1440} widths={[400, 800, 1200, 1440]}
+            sizes="(min-width: 78rem) 39vw, (min-width: 58rem) 52vw, 94vw"
+            loading={index === 0 ? 'eager' : 'lazy'} fetchpriority={index === 0 ? 'high' : 'auto'} class="gallery-image" />
           <span class="gallery-zoom">Ampliar <span aria-hidden="true">↗</span></span>
         </a>
       </li>
     ))}
   </ul>
 
-  {images.length > 1 && (
-    <ul class="gallery-thumbs" aria-label="Escolher prévia" hidden>
+  {images.length > 1 && <>
+    <div class="gallery-controls" aria-label="Navegação da galeria">
+      <button type="button" class="gallery-step tap" data-previous aria-label="Imagem anterior">←</button>
+      <span data-counter aria-live="polite">1 / {images.length}</span>
+      <button type="button" class="gallery-step tap" data-next aria-label="Próxima imagem">→</button>
+    </div>
+    <ul class="gallery-thumbs" aria-label="Escolher imagem">
       {images.map((image, index) => (
-        <li>
-          <button type="button" aria-label={`Exibir prévia ${index + 1}: ${image.alt}`} aria-pressed={index === 0} data-thumb>
-            <StoreImage image={image} limit={144} decorative />
-          </button>
-        </li>
+        <li><button type="button" aria-label={`Exibir imagem ${index + 1}: ${image.alt}`} aria-pressed={index === 0} data-thumb>
+          <StoreImage image={image} limit={180} widths={[90, 180]} decorative />
+        </button></li>
       ))}
     </ul>
-  )}
+  </>}
 
-  <dialog class="gallery-dialog" aria-label="Prévia ampliada">
+  <dialog class="gallery-dialog" aria-label="Imagem ampliada">
     <div class="gallery-dialog-content">
-      <button type="button" class="tap gallery-close" autofocus>Fechar prévia</button>
+      <div class="gallery-dialog-bar">
+        {images.length > 1 && <button type="button" class="gallery-step tap" data-dialog-previous aria-label="Imagem anterior">←</button>}
+        <span data-dialog-counter aria-live="polite">1 / {images.length}</span>
+        {images.length > 1 && <button type="button" class="gallery-step tap" data-dialog-next aria-label="Próxima imagem">→</button>}
+        <button type="button" class="tap gallery-close">Fechar <span aria-hidden="true">×</span></button>
+      </div>
       <img alt="" />
     </div>
   </dialog>
@@ -54,39 +56,70 @@ const { images } = Astro.props;
     connectedCallback() {
       const views = [...this.querySelectorAll<HTMLLIElement>('[data-view]')];
       const thumbs = [...this.querySelectorAll<HTMLButtonElement>('[data-thumb]')];
-      const thumbnailList = this.querySelector<HTMLUListElement>('.gallery-thumbs');
-
-      if (thumbnailList) {
-        const select = (index: number) => {
-          views.forEach((view, position) => { view.hidden = position !== index; });
-          thumbs.forEach((thumb, position) => thumb.setAttribute('aria-pressed', String(position === index)));
-        };
-
-        thumbs.forEach((thumb, index) => thumb.addEventListener('click', () => select(index)));
-        select(0);
-        thumbnailList.hidden = false;
-      }
-
-      const dialog = this.querySelector('dialog');
+      const counters = [...this.querySelectorAll<HTMLElement>('[data-counter], [data-dialog-counter]')];
+      const dialog = this.querySelector<HTMLDialogElement>('dialog');
       const enlarged = dialog?.querySelector('img');
-      const close = dialog?.querySelector('button');
-      if (!dialog || !enlarged || !close || typeof dialog.showModal !== 'function') return;
+      const close = dialog?.querySelector<HTMLButtonElement>('.gallery-close');
+      if (!views.length || !dialog || !enlarged || !close) return;
 
-      this.querySelectorAll<HTMLAnchorElement>('[data-zoom]').forEach((link) => {
+      let active = 0;
+      const select = (index: number) => {
+        active = (index + views.length) % views.length;
+        views.forEach((view, position) => { view.hidden = position !== active; });
+        thumbs.forEach((thumb, position) => thumb.setAttribute('aria-pressed', String(position === active)));
+        counters.forEach((counter) => { counter.textContent = `${active + 1} / ${views.length}`; });
+        const link = views[active].querySelector<HTMLAnchorElement>('[data-zoom]');
+        if (dialog.open && link) {
+          const image = link.querySelector('img');
+          enlarged.src = link.href;
+          enlarged.alt = image?.alt ?? '';
+        }
+      };
+      const show = (index: number) => select(index);
+      thumbs.forEach((thumb, index) => thumb.addEventListener('click', () => show(index)));
+      this.querySelector('[data-previous]')?.addEventListener('click', () => show(active - 1));
+      this.querySelector('[data-next]')?.addEventListener('click', () => show(active + 1));
+      this.querySelector('[data-dialog-previous]')?.addEventListener('click', () => show(active - 1));
+      this.querySelector('[data-dialog-next]')?.addEventListener('click', () => show(active + 1));
+
+      this.querySelectorAll<HTMLAnchorElement>('[data-zoom]').forEach((link, index) => {
         link.addEventListener('click', (event) => {
-          if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+          if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || typeof dialog.showModal !== 'function') return;
           event.preventDefault();
+          show(index);
           enlarged.src = link.href;
           enlarged.alt = link.querySelector('img')?.alt ?? '';
           dialog.showModal();
+          close.focus();
         });
       });
-      close.addEventListener('click', () => dialog.close());
-      dialog.addEventListener('click', (event) => {
-        if (event.target === dialog) dialog.close();
+      this.addEventListener('keydown', (event) => {
+        if (dialog.open || !['ArrowLeft', 'ArrowRight'].includes(event.key) || views.length < 2) return;
+        event.preventDefault();
+        show(active + (event.key === 'ArrowRight' ? 1 : -1));
       });
+      dialog.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight'].includes(event.key) || views.length < 2) return;
+        event.preventDefault();
+        show(active + (event.key === 'ArrowRight' ? 1 : -1));
+      });
+      close.addEventListener('click', () => dialog.close());
+      dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+
+      let touchStart: number | null = null;
+      this.querySelector('.gallery-views')?.addEventListener('pointerdown', (event) => {
+        const pointer = event as PointerEvent;
+        if (pointer.pointerType === 'touch') touchStart = pointer.clientX;
+      });
+      this.querySelector('.gallery-views')?.addEventListener('pointerup', (event) => {
+        const pointer = event as PointerEvent;
+        if (touchStart === null || pointer.pointerType !== 'touch' || views.length < 2) return;
+        const delta = pointer.clientX - touchStart;
+        if (Math.abs(delta) > 48) show(active + (delta < 0 ? 1 : -1));
+        touchStart = null;
+      }, { passive: true });
     }
   }
 
-  customElements.define('store-gallery', StoreGallery);
+  if (!customElements.get('store-gallery')) customElements.define('store-gallery', StoreGallery);
 </script>

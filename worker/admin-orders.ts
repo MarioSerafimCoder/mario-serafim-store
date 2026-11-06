@@ -1,6 +1,7 @@
 import type { StoreDB } from './catalog.ts';
 
-export const orderColumns = `o.id,o.sku,o.title,o.price_cents,o.remote_id,o.payment_id,o.status,o.created_at,o.coupon_code,o.discount_cents,
+export const orderColumns = `o.id,o.sku,o.title,o.price_cents,COALESCE(o.remote_id,(SELECT c.remote_id FROM checkout_carts c WHERE c.id=o.cart_id)) AS remote_id,
+  COALESCE(o.payment_id,(SELECT c.payment_id FROM checkout_carts c WHERE c.id=o.cart_id)) AS payment_id,o.status,o.created_at,o.coupon_code,o.discount_cents,
   EXISTS(SELECT 1 FROM order_events e WHERE e.order_id=o.id AND e.kind='download_started') AS delivered`;
 export const orderStatuses = {
   created:'Criado', pending:'Pendente', approved:'Aprovado', rejected:'Recusado', canceled:'Cancelado',

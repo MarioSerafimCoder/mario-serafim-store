@@ -1,59 +1,90 @@
 ---
 interface Props {
   sku: string;
-  priceCents?: number;
+  name: string;
+  slug: string;
+  priceCents: number;
+  dynamic: boolean;
 }
 
-const { sku, priceCents } = Astro.props;
+const { sku, name, slug, priceCents, dynamic } = Astro.props;
 ---
 
-<store-checkout data-sku={sku} data-price-cents={priceCents}>
+<store-checkout data-sku={sku} data-name={name} data-slug={slug} data-price-cents={priceCents} data-dynamic={String(dynamic)}>
   <p class="purchase-state"><span class="signal" aria-hidden="true"></span>Compra indisponível nesta etapa.</p>
-  <button type="button" class="action" data-checkout hidden>Comprar com Mercado Pago</button>
-  <section data-coupon hidden aria-label="Desconto">
-    <label> Cupom <input class="catalog-select" maxlength="24" autocomplete="off" spellcheck="false" /></label>
-    <button type="button" class="text-link">Conferir cupom</button>
-  </section>
-  <p role="status"></p>
-  <div class="article" hidden>
-    <p>Guarde este código para recuperar sua compra em outro navegador ou dispositivo.</p>
-    <label class="block">
-      Código de recuperação
-      <input class="catalog-select" readonly spellcheck="false" />
-    </label>
-    <a class="action" referrerpolicy="no-referrer">Continuar para o Mercado Pago</a>
+  <div class="checkout-actions" data-actions hidden>
+    <button type="button" class="action" data-checkout>Comprar agora</button>
+    <button type="button" class="cart-add" data-add-to-cart>Adicionar ao carrinho</button>
   </div>
+  <section data-coupon hidden aria-label="Desconto">
+    <label for={`coupon-${sku}`}>Cupom</label>
+    <div class="coupon-controls">
+      <input id={`coupon-${sku}`} class="catalog-select" maxlength="24" autocomplete="off" spellcheck="false" />
+      <button type="button" class="text-link">Conferir</button>
+    </div>
+  </section>
+  <p role="status" aria-live="polite"></p>
+  <section class="cart-panel" data-cart hidden aria-label="Seu carrinho">
+    <div class="cart-title-row"><h3>Seu carrinho</h3><span data-cart-count>0 itens</span></div>
+    <ul data-cart-items></ul>
+    <p class="cart-total" data-cart-total></p>
+    <p class="cart-warning" data-cart-warning hidden></p>
+    <button type="button" class="action" data-cart-checkout>Finalizar compra</button>
+  </section>
 </store-checkout>
 
 <script>
+  type BasketItem = { sku: string; name: string; slug: string; priceCents: number; coupon?: string; expectedTotalCents?: number };
+  const cartKey = 'mario-store-cart-v1';
+
+  function readCart(): BasketItem[] {
+    try {
+      const items = JSON.parse(localStorage.getItem(cartKey) ?? '[]');
+      return Array.isArray(items) ? items.filter((item) => item && typeof item.sku === 'string' &&
+        typeof item.name === 'string' && typeof item.slug === 'string' && Number.isSafeInteger(item.priceCents)) : [];
+    } catch { return []; }
+  }
+
+  function writeCart(items: BasketItem[]) {
+    try { localStorage.setItem(cartKey, JSON.stringify(items)); } catch {}
+  }
+
+  const money = (amount: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount / 100);
+
   class StoreCheckout extends HTMLElement {
     async connectedCallback() {
       const sku = this.dataset.sku;
-      const button = this.querySelector<HTMLButtonElement>('[data-checkout]');
+      const name = this.dataset.name;
+      const slug = this.dataset.slug;
+      const priceCents = Number(this.dataset.priceCents);
+      const actions = this.querySelector<HTMLElement>('[data-actions]');
+      const addButton = this.querySelector<HTMLButtonElement>('[data-add-to-cart]');
+      const buyButton = this.querySelector<HTMLButtonElement>('[data-checkout]');
       const couponBox = this.querySelector<HTMLElement>('[data-coupon]');
-      const couponField = couponBox?.querySelector('input');
-      const quoteButton = couponBox?.querySelector('button');
+      const couponField = couponBox?.querySelector<HTMLInputElement>('input');
+      const quoteButton = couponBox?.querySelector<HTMLButtonElement>('button');
       const notice = this.querySelector<HTMLElement>('.purchase-state');
-      const status = this.querySelector('[role="status"]');
-      const next = this.querySelector('div');
-      const codeField = next?.querySelector('input');
-      const link = this.querySelector('a');
-      if (!sku || !button || !notice || !status || !next || !codeField || !link) return;
+      const status = this.querySelector<HTMLElement>('[role="status"]');
+      const cartPanel = this.querySelector<HTMLElement>('[data-cart]');
+      const list = this.querySelector<HTMLUListElement>('[data-cart-items]');
+      const total = this.querySelector<HTMLElement>('[data-cart-total]');
+      const count = this.querySelector<HTMLElement>('[data-cart-count]');
+      const warning = this.querySelector<HTMLElement>('[data-cart-warning]');
+      const cartButton = this.querySelector<HTMLButtonElement>('[data-cart-checkout]');
+      if (!sku || !name || !slug || !actions || !addButton || !buyButton || !notice || !status || !cartPanel || !list || !total || !count || !warning || !cartButton) return;
 
       const availability = await fetch(`/compras/api/disponibilidade?sku=${encodeURIComponent(sku)}`)
-        .then((response) => response.ok ? response.json() : null)
-        .catch(() => null);
-      if (availability?.available !== true) return;
-      const expectedPriceCents = this.dataset.priceCents === undefined ? undefined : Number(this.dataset.priceCents);
-      if (expectedPriceCents !== undefined && availability.priceCents !== expectedPriceCents) {
-        status.textContent = 'O preço mudou. Recarregue a página.';
+        .then((response) => response.ok ? response.json() : null).catch(() => null);
+      const dynamic = this.dataset.dynamic === 'true';
+      const available = availability?.available === true && (!dynamic || availability.priceCents === priceCents);
+      if (!available) {
+        if (availability?.available === true && availability.priceCents !== priceCents) status.textContent = 'O preço mudou. Recarregue a página.';
         return;
       }
 
       let discount: { coupon: string; totalCents: number } | null = null;
       let quotePending = false;
-      const brl = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
-      if (availability.coupons === true && couponBox && couponField && quoteButton) {
+      if (dynamic && availability.coupons === true && couponBox && couponField && quoteButton) {
         couponBox.hidden = false;
         couponField.addEventListener('input', () => { discount = null; status.textContent = ''; });
         quoteButton.addEventListener('click', async () => {
@@ -62,80 +93,136 @@ const { sku, priceCents } = Astro.props;
           status.textContent = 'Conferindo cupom…';
           const coupon = couponField.value.trim();
           try {
-            const response = await fetch('/compras/api/cotacao',{
-              method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sku,coupon,expectedPriceCents}),
+            const response = await fetch('/compras/api/cotacao', {
+              method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ sku, coupon, expectedPriceCents: priceCents }),
             });
             const result = await response.json();
             if (couponField.value.trim() !== coupon) return;
             if (!response.ok) { status.textContent = result.error; return; }
-            discount = {coupon:result.coupon,totalCents:result.totalCents};
-            status.textContent = 'Total com desconto: ' + brl.format(result.totalCents/100) + '.';
+            discount = { coupon: result.coupon, totalCents: result.totalCents };
+            status.textContent = 'Total com desconto: ' + money(result.totalCents) + '.';
           } catch { status.textContent = 'Não foi possível conferir o cupom.'; }
           finally { quotePending = quoteButton.disabled = false; }
         });
       }
 
-      notice.hidden = true;
-      button.hidden = false;
-      button.addEventListener('click', async () => {
-        if (quotePending) return;
-        if (couponField?.value.trim() && !discount) {
-          status.textContent = 'Confira o cupom ou limpe o campo para continuar.';
-          return;
+      const renderCart = async () => {
+        const cart = readCart();
+        list.replaceChildren();
+        count.textContent = `${cart.length} ${cart.length === 1 ? 'item' : 'itens'}`;
+        const totalCents = cart.reduce((sum, item) => sum + (item.expectedTotalCents ?? item.priceCents), 0);
+        total.textContent = cart.length ? 'Total ' + money(totalCents) : 'Seu carrinho está vazio.';
+        cart.forEach((item) => {
+          const li = document.createElement('li');
+          const link = document.createElement('a');
+          link.href = `/produtos/${encodeURIComponent(item.slug)}/`;
+          link.textContent = item.name;
+          const price = document.createElement('span');
+          price.textContent = money(item.expectedTotalCents ?? item.priceCents);
+          const remove = document.createElement('button');
+          remove.type = 'button'; remove.className = 'text-link'; remove.textContent = 'Remover';
+          remove.setAttribute('aria-label', `Remover ${item.name} do carrinho`);
+          remove.addEventListener('click', () => { writeCart(readCart().filter((entry) => entry.sku !== item.sku)); void renderCart(); });
+          li.append(link, price, remove);
+          list.append(li);
+        });
+        warning.hidden = true;
+        cartButton.disabled = cart.length === 0;
+        cartPanel.hidden = cart.length === 0;
+        if (cart.length) {
+          const checks = await Promise.all(cart.map((item) => fetch(`/compras/api/disponibilidade?sku=${encodeURIComponent(item.sku)}`)
+            .then((response) => response.ok ? response.json() : null).catch(() => null)));
+          const invalid = cart.some((item, index) => checks[index]?.available !== true ||
+            (checks[index]?.priceCents !== undefined && checks[index].priceCents !== item.priceCents));
+          if (invalid) {
+            warning.textContent = 'Um produto do carrinho está indisponível ou teve o preço alterado. Atualize o carrinho antes de comprar.';
+            warning.hidden = false;
+            cartButton.disabled = true;
+          }
         }
-        const offer = discount;
-        const key = 'store-checkout:' + sku + (offer ? ':' + offer.coupon : '');
-        let code = crypto.randomUUID();
-        try {
-          const previous = sessionStorage.getItem(key);
-          if (previous) code = previous as typeof code;
-          sessionStorage.setItem(key, code);
-        } catch {}
-        button.disabled = true;
-        if (couponField) couponField.disabled = true;
-        if (quoteButton) quoteButton.disabled = true;
+      };
+
+      actions.hidden = false;
+      notice.hidden = true;
+      await renderCart();
+
+      addButton.addEventListener('click', async () => {
+        if (quotePending) return;
+        if (couponField?.value.trim() && !discount) { status.textContent = 'Confira o cupom ou limpe o campo antes de adicionar.'; return; }
+        const cart = readCart().filter((item) => item.sku !== sku);
+        if (cart.length >= 10) { status.textContent = 'O carrinho aceita até 10 produtos diferentes.'; return; }
+        cart.push({ sku, name, slug, priceCents, ...(discount ? { coupon: discount.coupon, expectedTotalCents: discount.totalCents } : {}) });
+        writeCart(cart);
+        status.textContent = 'Adicionado ao carrinho.';
+        await renderCart();
+        cartPanel.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+      });
+
+      let pending = false;
+      buyButton.addEventListener('click', async () => {
+        if (pending || quotePending) return;
+        if (couponField?.value.trim() && !discount) { status.textContent = 'Confira o cupom ou limpe o campo para continuar.'; return; }
+        pending = buyButton.disabled = true;
         status.textContent = 'Preparando seu pedido…';
+        const key = 'store-checkout:' + sku + ':' + priceCents + (discount ? ':' + discount.coupon : '');
+        let code: string = crypto.randomUUID();
+        try { code = sessionStorage.getItem(key) ?? code; sessionStorage.setItem(key, code); } catch {}
         try {
           const response = await fetch('/compras/api/checkout', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ sku, code, expectedPriceCents, ...(offer ? {coupon:offer.coupon,expectedTotalCents:offer.totalCents} : {}) }),
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ sku, code, ...(dynamic ? { expectedPriceCents: priceCents } : {}), ...(discount ? { coupon: discount.coupon, expectedTotalCents: discount.totalCents } : {}) }),
           });
           const result = await response.json();
-          if (!response.ok) {
-            status.textContent = result.error ?? 'Tente novamente.';
-            if (response.status === 409) {
-              link.href = '/compras/';
-              link.textContent = 'Consultar meu pedido';
-              codeField.value = code;
-              next.hidden = false;
-              button.hidden = true;
-            }
-            return;
-          }
-          codeField.value = code;
-          link.href = result.checkoutUrl;
-          next.hidden = false;
-          button.hidden = true;
-          status.textContent = offer ? 'Pedido preparado. Total: ' + brl.format(offer.totalCents/100) + '.' : 'Pedido preparado.';
-          codeField.focus();
-        } catch {
-          status.textContent = 'Não foi possível conectar. Tente novamente nesta mesma aba.';
-        } finally {
-          button.disabled = false;
-          if (couponField) couponField.disabled = false;
-          if (quoteButton) quoteButton.disabled = false;
-          if (couponBox && button.hidden) couponBox.hidden = true;
-        }
+          if (!response.ok) { status.textContent = result.error ?? 'Tente novamente.'; return; }
+          window.location.assign(result.checkoutUrl);
+        } catch { status.textContent = 'Não foi possível conectar. Tente novamente nesta mesma aba.'; }
+        finally { pending = buyButton.disabled = false; }
+      });
+
+      cartButton.addEventListener('click', async () => {
+        if (pending) return;
+        const cart = readCart();
+        if (!cart.length) return;
+        pending = cartButton.disabled = true;
+        status.textContent = 'Preparando seu carrinho…';
+        const fingerprint = cart.map((item) => [item.sku,item.priceCents,item.coupon ?? '',item.expectedTotalCents ?? ''].join(':')).join('|');
+        const key = 'store-cart-checkout:' + fingerprint;
+        let code: string = crypto.randomUUID();
+        try { code = sessionStorage.getItem(key) ?? code; sessionStorage.setItem(key, code); } catch {}
+        try {
+          const response = await fetch('/compras/api/checkout-carrinho', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ code, items: cart.map((item) => ({ sku: item.sku, expectedPriceCents: item.priceCents,
+              ...(item.coupon ? { coupon: item.coupon, expectedTotalCents: item.expectedTotalCents } : {}) })) }),
+          });
+          const result = await response.json();
+          if (!response.ok) { status.textContent = result.error ?? 'Tente novamente.'; return; }
+          window.location.assign(result.checkoutUrl);
+        } catch { status.textContent = 'Não foi possível iniciar o pagamento do carrinho. Tente novamente.'; }
+        finally { pending = cartButton.disabled = false; }
       });
     }
   }
 
-  customElements.define('store-checkout', StoreCheckout);
+  if (!customElements.get('store-checkout')) customElements.define('store-checkout', StoreCheckout);
 </script>
 
 <style>
-  store-checkout, .article { display: grid; justify-items: start; gap: .6rem; }
+  store-checkout, .checkout-actions { display: grid; justify-items: stretch; gap: .6rem; }
+  .cart-add { display: inline-flex; min-height: 3rem; align-items: center; justify-content: center; padding: .65rem 1rem; border: 1px solid var(--line); border-radius: 100px; color: var(--ink); font-weight: 650; cursor: pointer; }
+  .cart-add:hover { border-color: var(--accent); color: var(--accent); }
+  .coupon-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .6rem; }
+  .cart-panel { display: grid; gap: .65rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+  .cart-title-row { display: flex; justify-content: space-between; gap: 1rem; font-size: .9rem; }
+  .cart-title-row h3 { font-weight: 650; }
+  .cart-title-row span { color: var(--muted); font-size: .8rem; }
+  .cart-panel ul { display: grid; gap: .5rem; }
+  .cart-panel li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .6rem; padding-block: .35rem; border-bottom: 1px solid var(--line); font-size: .82rem; }
+  .cart-panel li a { overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: .15em; }
+  .cart-panel li button { font-size: .76rem; }
+  .cart-total { justify-self: end; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cart-warning { color: var(--muted); font-size: .82rem; }
   [role="status"]:empty { display: none; }
   button:enabled { cursor: pointer; }
   button:disabled { opacity: .7; }

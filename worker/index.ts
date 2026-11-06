@@ -1,5 +1,5 @@
 import { createRemoteOrder, getRemoteOrder, hex, hmacKey, paymentState, validProviderId, validWebhook, verifyHmac, verifyOrder } from './mercado-pago.ts';
-import type { Env, Order, Product } from './types.ts';
+import type { CartLine, CheckoutCart, Env, Order, Product } from './types.ts';
 import { couponDiscount, couponPattern, eligibleCoupon, minimumCharged } from './coupons.ts';
 import { catalogOffer } from './catalog.ts';
 
@@ -61,8 +61,8 @@ async function signature(secret: string, data: string) {
   return hex(await crypto.subtle.sign('HMAC', await hmacKey(secret), encoder.encode(data)));
 }
 
-async function cookie(env: Ready, order: Order) {
-  const data = `${order.id}.${now() + 86400}`;
+async function cookie(env: Ready, id: string) {
+  const data = `${id}.${now() + 86400}`;
   const mac = await signature(env.STORE_SESSION_SECRET, `session:${data}`);
   return `store_session=${data}.${mac}; Path=/compras/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`;
 }
@@ -72,12 +72,22 @@ function findOrder(env: Ready, id: string) {
     .bind(id, env.MP_MODE, env.MP_SELLER_ID).first<Order>();
 }
 
+function findCart(env: Ready, id: string) {
+  return env.DB.prepare('SELECT * FROM checkout_carts WHERE id = ? AND mode = ? AND seller = ?')
+    .bind(id, env.MP_MODE, env.MP_SELLER_ID).first<CheckoutCart>();
+}
+
+type PurchaseSession = { kind: 'cart'; cart: CheckoutCart } | { kind: 'order'; order: Order };
+
 async function session(request: Request, env: Ready) {
   const value = request.headers.get('cookie')?.split(/;\s*/).find((part) => part.startsWith('store_session='))?.slice(14);
   const [id = '', expiry = '', mac = ''] = value?.split('.') ?? [];
   if (!uuid.test(id) || !/^\d{10}$/.test(expiry) || Number(expiry) <= now()) return null;
   if (!await verifyHmac(env.STORE_SESSION_SECRET, `session:${id}.${expiry}`, mac)) return null;
-  return findOrder(env, id);
+  const cart = await findCart(env, id);
+  if (cart) return { kind: 'cart', cart } satisfies PurchaseSession;
+  const order = await findOrder(env, id);
+  return order ? { kind: 'order', order } satisfies PurchaseSession : null;
 }
 
 async function available(env: Ready, sku: string) {
@@ -189,7 +199,149 @@ async function checkout(request: Request, env: Ready) {
     order = await find();
   }
   if (!order?.checkout_url) return error('Não foi possível iniciar o checkout. Tente novamente.', 503);
-  return json({ id: order.id, checkoutUrl: order.checkout_url }, 200, { 'set-cookie': await cookie(env, order) });
+  return json({ id: order.id, checkoutUrl: order.checkout_url }, 200, { 'set-cookie': await cookie(env, order.id) });
+}
+
+interface CartRequestItem {
+  sku: string;
+  expectedPriceCents: number;
+  coupon?: string;
+  expectedTotalCents?: number;
+}
+
+async function continueCartCheckout(env: Ready, cart: CheckoutCart) {
+  if (cart.mode !== env.MP_MODE || cart.seller !== env.MP_SELLER_ID || cart.created_at + 86400 <= now() ||
+      !['created','pending'].includes(cart.status)) return error('Acesse sua compra para consultar o pagamento.', 409);
+  if (!cart.checkout_url) {
+    const lines = await env.DB.prepare('SELECT * FROM orders WHERE cart_id=? ORDER BY cart_position').bind(cart.id).all<CartLine>();
+    const remote = await createRemoteOrder(env, cart, lines.results);
+    await env.DB.prepare('UPDATE checkout_carts SET remote_id=?,checkout_url=? WHERE id=? AND (remote_id IS NULL OR remote_id=?)')
+      .bind(remote.id,remote.url,cart.id,remote.id).run();
+    const updatedCart = await findCart(env, cart.id);
+    if (!updatedCart) return error('Não foi possível iniciar o checkout. Tente novamente.',503);
+    cart = updatedCart;
+  }
+  if (!cart?.checkout_url) return error('Não foi possível iniciar o checkout. Tente novamente.', 503);
+  return json({id:cart.id,checkoutUrl:cart.checkout_url},200,{'set-cookie':await cookie(env,cart.id)});
+}
+
+async function checkoutCart(request: Request, env: Ready) {
+  const body = await readBody(request);
+  if (!body || Object.keys(body).length !== 2 || !Array.isArray(body.items) || body.items.length < 1 || body.items.length > 10 ||
+      typeof body.code !== 'string' || !uuid.test(body.code) || body.items.some((value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return true;
+        const item = value as Record<string, unknown>;
+        const hasCoupon = Object.hasOwn(item, 'coupon') || Object.hasOwn(item, 'expectedTotalCents');
+        const keys = Object.keys(item);
+        return keys.some((key) => !['sku', 'expectedPriceCents', ...(hasCoupon ? ['coupon', 'expectedTotalCents'] : [])].includes(key)) ||
+          typeof item.sku !== 'string' || item.sku.length > 80 || !skuPattern.test(item.sku) ||
+          !Number.isSafeInteger(item.expectedPriceCents) || (hasCoupon && (!Number.isSafeInteger(item.expectedTotalCents) ||
+            typeof item.coupon !== 'string' || !couponInput(item.coupon)));
+      })) return error('Dados do carrinho inválidos.', 400);
+  if (env.CHECKOUT_ENABLED !== 'true' || !env.MP_WEBHOOK_SECRET || !env.FILES) {
+    return error('Compra indisponível.', 503);
+  }
+
+  const requested = body.items as CartRequestItem[];
+  if (new Set(requested.map((item) => item.sku)).size !== requested.length) return error('Remova os produtos repetidos do carrinho.', 400);
+  const recoveryHash = await hash(body.code);
+  const previous = await env.DB.prepare('SELECT * FROM checkout_carts WHERE recovery_hash=? AND mode=? AND seller=?')
+    .bind(recoveryHash,env.MP_MODE,env.MP_SELLER_ID).first<CheckoutCart>();
+  if (previous) {
+    const sql = env.DYNAMIC_CATALOG === 'true'
+      ? 'SELECT sku,price_cents,coupon_code,discount_cents FROM orders WHERE cart_id=? ORDER BY cart_position'
+      : 'SELECT sku,price_cents,NULL AS coupon_code,0 AS discount_cents FROM orders WHERE cart_id=? ORDER BY cart_position';
+    const { results } = await env.DB.prepare(sql).bind(previous.id)
+      .all<{sku:string;price_cents:number;coupon_code:string|null;discount_cents:number}>();
+    const matches = results.length === requested.length && results.every((line,index) => {
+      const item = requested[index];
+      const coupon = typeof item.coupon === 'string' ? couponInput(item.coupon) : null;
+      return line.sku === item.sku && line.price_cents + line.discount_cents === item.expectedPriceCents &&
+        line.coupon_code === coupon && (!coupon || line.price_cents === item.expectedTotalCents);
+    });
+    if (!matches || previous.total_cents !== results.reduce((sum,line)=>sum+line.price_cents,0)) {
+      return error('Este código já está vinculado a outro carrinho.',409);
+    }
+    return continueCartCheckout(env,previous);
+  }
+  const enriched: { input: CartRequestItem; sku: string; title: string; price: number; version: string; object_key: string; filename: string; discount: number; coupon: string | null }[] = [];
+  for (const input of requested) {
+    const offer = await available(env, input.sku);
+    if (!offer) return error('Um dos produtos do carrinho não está mais disponível.', 404);
+    const product = offer.product;
+    if (input.expectedPriceCents !== product.priceCents) return error('O preço de um produto mudou. Atualize o carrinho.', 412);
+    let coupon: string | null = null;
+    let discount = 0;
+    if (Object.hasOwn(input, 'coupon') || Object.hasOwn(input, 'expectedTotalCents')) {
+      coupon = env.DYNAMIC_CATALOG === 'true' && env.COUPONS_ENABLED === 'true' && typeof input.coupon === 'string' ? couponInput(input.coupon) : null;
+      if (!coupon || !Number.isSafeInteger(input.expectedTotalCents)) return error('Confira novamente os cupons do carrinho.', 400);
+      const current = await couponDiscount(env.DB, coupon, input.sku, product.priceCents);
+      if (current === null || product.priceCents - current !== input.expectedTotalCents) return error('Um cupom ou preço mudou. Confira o carrinho.', 412);
+      discount = current;
+    }
+    enriched.push({ input, sku: product.sku, title: product.name, price: product.priceCents, version: product.version,
+      object_key: offer.file.object_key, filename: offer.file.filename, discount, coupon });
+  }
+  const total = enriched.reduce((sum, line) => sum + line.price - line.discount, 0);
+  if (!Number.isSafeInteger(total) || total <= 0 || total > 99999999) return error('Total do carrinho inválido.', 400);
+
+  const matches = async (candidate: CheckoutCart) => {
+    const sql = env.DYNAMIC_CATALOG === 'true'
+      ? 'SELECT sku,price_cents,coupon_code,discount_cents FROM orders WHERE cart_id=? ORDER BY cart_position'
+      : 'SELECT sku,price_cents,NULL AS coupon_code,0 AS discount_cents FROM orders WHERE cart_id=? ORDER BY cart_position';
+    const { results } = await env.DB.prepare(sql).bind(candidate.id)
+      .all<{sku:string;price_cents:number;coupon_code:string|null;discount_cents:number}>();
+    const expected = enriched.map(({sku,price,discount,coupon})=>({sku,price_cents:price-discount,coupon_code:coupon,discount_cents:discount}));
+    return candidate.total_cents === total && JSON.stringify(results) === JSON.stringify(expected);
+  };
+  let cart = await env.DB.prepare('SELECT * FROM checkout_carts WHERE recovery_hash = ?').bind(recoveryHash).first<CheckoutCart>();
+  if (cart) {
+    if (!await matches(cart)) return error('Este código já está vinculado a outro carrinho.', 409);
+  } else {
+    const cartId = crypto.randomUUID();
+    const statements = [env.DB.prepare(`INSERT INTO checkout_carts(id,recovery_hash,total_cents,currency,mode,seller,created_at)
+      VALUES(?,?,?,'BRL',?,?,?)`).bind(cartId,recoveryHash,total,env.MP_MODE,env.MP_SELLER_ID,now())];
+    for (const [cartPosition,line] of enriched.entries()) {
+      const orderId = crypto.randomUUID();
+      const hiddenRecovery = await hash('cart-line:' + orderId);
+      if (line.coupon && env.DYNAMIC_CATALOG === 'true') {
+        statements.push(env.DB.prepare(`WITH offer AS (${eligibleCoupon})
+          INSERT INTO orders(id,recovery_hash,sku,title,price_cents,currency,object_key,filename,mode,seller,created_at,category_at_purchase,coupon_code,discount_cents,cart_id,cart_position)
+          SELECT ?,?,?,?,p.price_cents-offer.discount,'BRL',?,?,?, ?,?,p.category,offer.code,offer.discount,?,?
+          FROM products p JOIN fulfillment f ON f.sku=p.sku AND f.version=p.version AND f.enabled=1 CROSS JOIN offer
+          WHERE p.sku=? AND p.status='published' AND p.price_cents=? AND p.version=? AND p.name=? AND f.object_key=?
+            AND offer.discount=? AND p.price_cents-offer.discount=?
+        ON CONFLICT(recovery_hash) DO NOTHING`).bind(line.coupon,line.sku,orderId,hiddenRecovery,line.sku,line.title,
+          line.object_key,line.filename,env.MP_MODE,env.MP_SELLER_ID,now(),cartId,cartPosition,line.sku,line.price,line.version,line.title,line.object_key,
+          line.discount,line.price-line.discount));
+      } else if (env.DYNAMIC_CATALOG === 'true') {
+        statements.push(env.DB.prepare(`INSERT INTO orders(id,recovery_hash,sku,title,price_cents,currency,object_key,filename,mode,seller,created_at,category_at_purchase,cart_id,cart_position)
+          SELECT ?,?,?,?,?, 'BRL',?,?,?,?,?,p.category,?,? FROM products p JOIN fulfillment f ON f.sku=p.sku AND f.version=p.version AND f.enabled=1
+          WHERE p.sku=? AND p.status='published' AND p.price_cents=? AND p.version=? AND p.name=? AND f.object_key=?
+          ON CONFLICT(recovery_hash) DO NOTHING`).bind(orderId,hiddenRecovery,line.sku,line.title,line.price,line.object_key,line.filename,
+          env.MP_MODE,env.MP_SELLER_ID,now(),cartId,cartPosition,line.sku,line.price,line.version,line.title,line.object_key));
+      } else {
+        statements.push(env.DB.prepare(`INSERT INTO orders(id,recovery_hash,sku,title,price_cents,currency,object_key,filename,mode,seller,created_at,cart_id,cart_position)
+          SELECT ?,?,?,?,?, 'BRL',?,?,?,?,?,?,? FROM fulfillment
+          WHERE sku=? AND version=? AND enabled=1 AND object_key=?
+          ON CONFLICT(recovery_hash) DO NOTHING`).bind(orderId,hiddenRecovery,line.sku,line.title,line.price,line.object_key,line.filename,
+          env.MP_MODE,env.MP_SELLER_ID,now(),cartId,cartPosition,line.sku,line.version,line.object_key));
+      }
+    }
+    try {
+      await env.DB.batch(statements);
+    } catch (failure) {
+      cart = await env.DB.prepare('SELECT * FROM checkout_carts WHERE recovery_hash=?').bind(recoveryHash).first<CheckoutCart>();
+      if (!cart) throw failure;
+    }
+    if (!cart) cart = await findCart(env, cartId);
+    if (!cart || !await matches(cart)) {
+      if (cart?.id === cartId) await env.DB.batch([env.DB.prepare("UPDATE checkout_carts SET status='canceled' WHERE id=?").bind(cartId),
+        env.DB.prepare("UPDATE orders SET status='canceled' WHERE cart_id=?").bind(cartId)]);
+      return error('Um produto mudou durante a criação do carrinho. Atualize e tente novamente.', 412);
+    }
+  }
+  return cart ? continueCartCheckout(env,cart) : error('Não foi possível criar o carrinho. Tente novamente.',503);
 }
 
 async function reconcile(env: Ready, order: Order, remoteId: string) {
@@ -220,11 +372,46 @@ async function reconcile(env: Ready, order: Order, remoteId: string) {
   return true;
 }
 
+async function reconcileCart(env: Ready, cart: CheckoutCart, remoteId: string) {
+  const remote = await getRemoteOrder(env, remoteId);
+  if (!verifyOrder(remote, cart) || remote.id.toUpperCase() !== remoteId.toUpperCase()) {
+    const lines = await env.DB.prepare('SELECT id FROM orders WHERE cart_id=?').bind(cart.id).all<{id:string}>();
+    await env.DB.batch(lines.results.map(({id})=>env.DB.prepare("INSERT INTO order_events(order_id,kind,status) VALUES(?,'verification_failed',?)").bind(id,cart.status)));
+    return false;
+  }
+  const updated = Date.parse(remote.last_updated_date);
+  if (!Number.isFinite(updated)) return false;
+  const { status, payment } = paymentState(remote,cart);
+  const dynamic = env.DYNAMIC_CATALOG === 'true';
+  const email = status === 'approved' && typeof remote.payer?.email === 'string' ? remote.payer.email.trim().toLowerCase() : '';
+  const buyer = email.length <= 254 &&
+    /^[a-z0-9.!#$%&'+/=?^_`{|}~-]{1,64}@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/.test(email) ? email : null;
+  const groupUpdate=env.DB.prepare(`
+    UPDATE checkout_carts SET status=?,payment_id=COALESCE(?,payment_id),provider_updated=?,last_check=?
+    WHERE id=? AND remote_id=? AND (provider_updated<? OR (provider_updated=? AND (
+      status=? OR (status IN ('created','pending') AND ? NOT IN ('created','pending')) OR
+      (status='approved' AND ? IN ('review','canceled','refunded','disputed')))))
+      AND (status NOT IN ('refunded','disputed') OR ?<>'approved')
+  `).bind(status,payment,updated,now(),cart.id,cart.remote_id,updated,updated,status,status,status,status);
+  const lineUpdate=env.DB.prepare(`UPDATE orders SET status=?,payment_id=COALESCE(?,payment_id)
+    ${dynamic ? ',buyer_email=COALESCE(buyer_email,?)' : ''}
+    WHERE cart_id=? AND EXISTS(SELECT 1 FROM checkout_carts c WHERE c.id=? AND c.status=?)`)
+    .bind(status,payment,...(dynamic?[buyer]:[]),cart.id,cart.id,status);
+  await env.DB.batch([groupUpdate,lineUpdate]);
+  return true;
+}
+
 async function webhook(request: Request, env: Ready, url: URL) {
   const values = url.searchParams.getAll('data.id');
   const id = values[0];
   if (values.length !== 1 || !validProviderId(id) || !env.MP_WEBHOOK_SECRET ||
       !await validWebhook(request, env.MP_WEBHOOK_SECRET, id)) return error('Notificação inválida.', 401);
+  const cart = await env.DB.prepare('SELECT * FROM checkout_carts WHERE remote_id=? COLLATE NOCASE AND mode=? AND seller=?')
+    .bind(id,env.MP_MODE,env.MP_SELLER_ID).first<CheckoutCart>();
+  if (cart?.remote_id) {
+    await reconcileCart(env,cart,cart.remote_id);
+    return json({received:true});
+  }
   const order = await env.DB.prepare('SELECT * FROM orders WHERE remote_id = ? COLLATE NOCASE AND mode = ? AND seller = ?')
     .bind(id, env.MP_MODE, env.MP_SELLER_ID).first<Order>();
   // Early notifications may arrive before the create response was stored. Scheduled reconciliation covers these.
@@ -235,21 +422,35 @@ async function webhook(request: Request, env: Ready, url: URL) {
 async function recover(request: Request, env: Ready) {
   const body = await readBody(request);
   if (!body || typeof body.code !== 'string' || !uuid.test(body.code)) return error('Código inválido.', 400);
+  const recoveryHash = await hash(body.code);
+  const cart = await env.DB.prepare('SELECT * FROM checkout_carts WHERE recovery_hash=? AND mode=? AND seller=?')
+    .bind(recoveryHash,env.MP_MODE,env.MP_SELLER_ID).first<CheckoutCart>();
+  if (cart) return json({id:cart.id},200,{'set-cookie':await cookie(env,cart.id)});
   const order = await env.DB.prepare('SELECT * FROM orders WHERE recovery_hash = ? AND mode = ? AND seller = ?')
-    .bind(await hash(body.code), env.MP_MODE, env.MP_SELLER_ID).first<Order>();
+    .bind(recoveryHash, env.MP_MODE, env.MP_SELLER_ID).first<Order>();
   if (!order) return error('Compra não encontrada para esse código.', 404);
-  return json({ id: order.id }, 200, { 'set-cookie': await cookie(env, order) });
+  return json({ id: order.id }, 200, { 'set-cookie': await cookie(env, order.id) });
 }
 
-async function download(request: Request, env: Ready, order: Order) {
+async function download(request: Request, env: Ready, purchase: PurchaseSession) {
   const body = await readBody(request, true);
   const [expiry = '', mac = ''] = typeof body?.grant === 'string' ? body.grant.split('.') : [];
-  if (order.status !== 'approved' || !order.remote_id || !env.FILES ||
+  let order: Order | null = null;
+  if (purchase.kind === 'cart' && typeof body?.item === 'string' && uuid.test(body.item)) {
+    order = await env.DB.prepare('SELECT * FROM orders WHERE id=? AND cart_id=?').bind(body.item,purchase.cart.id).first<Order>();
+  } else if (purchase.kind === 'order') order = purchase.order;
+  const remoteId = purchase.kind === 'cart' ? purchase.cart.remote_id : order?.remote_id;
+  const status = purchase.kind === 'cart' ? purchase.cart.status : order?.status;
+  if (!order || status !== 'approved' || !remoteId || !env.FILES ||
       !/^\d{10}$/.test(expiry) || Number(expiry) <= now() ||
       !await verifyHmac(env.STORE_SESSION_SECRET, `download:${order.id}.${expiry}`, mac)) {
     return error('Download indisponível para este pedido.', 403);
   }
-  if (!await reconcile(env, order, order.remote_id) || (await findOrder(env, order.id))?.status !== 'approved') {
+  if (purchase.kind === 'cart') {
+    if (status !== 'approved' || !remoteId || !await reconcileCart(env,purchase.cart,remoteId) ||
+        (await findCart(env,purchase.cart.id))?.status !== 'approved') return error('Não foi possível confirmar o acesso ao arquivo.',403);
+  } else if (status !== 'approved' || !remoteId || !await reconcile(env,order,remoteId) ||
+      (await findOrder(env,order.id))?.status !== 'approved') {
     return error('Não foi possível confirmar o acesso ao arquivo.', 403);
   }
   const file = await env.FILES.get(order.object_key);
@@ -288,21 +489,35 @@ async function handle(request: Request, env: Env): Promise<Response> {
   }
   if (route === '/compras/api/cotacao' && request.method === 'POST') return quote(request,env);
   if (route === '/compras/api/checkout' && request.method === 'POST') return checkout(request, env);
+  if (route === '/compras/api/checkout-carrinho' && request.method === 'POST') return checkoutCart(request, env);
   if (route === '/compras/api/recuperar' && request.method === 'POST') return recover(request, env);
-  const order = await session(request, env);
-  if (!order) return error('Recupere a compra com seu código de acesso.', 401);
+  const purchase = await session(request, env);
+  if (!purchase) return error('Recupere a compra com seu código de acesso.', 401);
   if (route === '/compras/api/pedido' && request.method === 'GET') {
     const expected = url.searchParams.get('pedido');
-    if (expected && expected !== order.id) return error('Recupere a compra com seu código de acesso.', 401);
+    const id = purchase.kind === 'cart' ? purchase.cart.id : purchase.order.id;
+    if (expected && expected !== id) return error('Recupere a compra com seu código de acesso.', 401);
     const expiry = now() + 300;
+    if (purchase.kind === 'cart') {
+      const { results } = await env.DB.prepare('SELECT id,title,sku,status FROM orders WHERE cart_id=? ORDER BY cart_position')
+        .bind(purchase.cart.id).all<{id:string;title:string;sku:string;status:string}>();
+      const items = await Promise.all(results.map(async (item) => ({
+        id:item.id,title:item.title,sku:item.sku,grant:item.status==='approved'
+          ? `${expiry}.${await signature(env.STORE_SESSION_SECRET,`download:${item.id}.${expiry}`)}` : null,
+      })));
+      return json({id,title:items.map(({title})=>title).join(' · '),status:purchase.cart.status,items});
+    }
+    const order = purchase.order;
     const grant = order.status === 'approved' ? `${expiry}.${await signature(env.STORE_SESSION_SECRET, `download:${order.id}.${expiry}`)}` : null;
-    return json({ id: order.id, title: order.title, status: order.status, grant });
+    return json({ id: order.id, title: order.title, status: order.status, grant,
+      items:[{id:order.id,title:order.title,sku:order.sku,grant}] });
   }
   if (route === '/compras/api/atualizar' && request.method === 'POST') {
-    if (order.remote_id) await refresh(env, order);
+    if (purchase.kind === 'cart' && purchase.cart.remote_id) await refreshCart(env,purchase.cart);
+    else if (purchase.kind === 'order' && purchase.order.remote_id) await refresh(env,purchase.order);
     return json({ updated: true });
   }
-  if (route === '/compras/api/download' && request.method === 'POST') return download(request, env, order);
+  if (route === '/compras/api/download' && request.method === 'POST') return download(request, env, purchase);
   return error('Rota de compras inválida.', 404);
 }
 
@@ -311,6 +526,13 @@ async function refresh(env: Ready, order: Order) {
   const claimed = await env.DB.prepare('UPDATE orders SET last_check = ? WHERE id = ? AND last_check < ? RETURNING id')
     .bind(now(), order.id, now() - 30).first<{ id: string }>();
   if (claimed) await reconcile(env, order, order.remote_id);
+}
+
+async function refreshCart(env: Ready, cart: CheckoutCart) {
+  if (!cart.remote_id) return;
+  const claimed = await env.DB.prepare('UPDATE checkout_carts SET last_check=? WHERE id=? AND last_check<? RETURNING id')
+    .bind(now(),cart.id,now()-30).first<{id:string}>();
+  if (claimed) await reconcileCart(env,cart,cart.remote_id);
 }
 
 export default {
@@ -327,12 +549,15 @@ export default {
 
   async scheduled(_event: unknown, env: Env) {
     if (!ready(env)) return;
-    const { results } = await env.DB.prepare(`
+    const [orders,carts] = await Promise.all([env.DB.prepare(`
       SELECT * FROM orders WHERE mode = ? AND seller = ? AND remote_id IS NOT NULL
       AND status NOT IN ('refunded','canceled') AND created_at > ? AND last_check < ?
       ORDER BY last_check LIMIT 8
-    `).bind(env.MP_MODE, env.MP_SELLER_ID, now() - 90 * 86400, now() - 900).all<Order>();
-    const outcomes = await Promise.allSettled(results.map((order) => refresh(env, order)));
+    `).bind(env.MP_MODE, env.MP_SELLER_ID, now() - 90 * 86400, now() - 900).all<Order>(),
+    env.DB.prepare(`SELECT * FROM checkout_carts WHERE mode=? AND seller=? AND remote_id IS NOT NULL
+      AND status NOT IN ('refunded','canceled') AND created_at>? AND last_check<? ORDER BY last_check LIMIT 8`)
+      .bind(env.MP_MODE,env.MP_SELLER_ID,now()-90*86400,now()-900).all<CheckoutCart>()]);
+    const outcomes = await Promise.allSettled([...orders.results.map((order) => refresh(env, order)), ...carts.results.map((cart)=>refreshCart(env,cart))]);
     if (outcomes.some((result) => result.status === 'rejected')) console.error('Reconciliação de compras incompleta');
   },
 };

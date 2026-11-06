@@ -8,10 +8,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p id="purchase-title"></p>
     <p id="purchase-status" role="status">Consultando seu pedido…</p>
     <button id="purchase-refresh" class="action" type="button" hidden>Atualizar pagamento</button>
-    <form id="purchase-download" method="post" action="/compras/api/download" hidden>
-      <input type="hidden" name="grant" />
-      <button class="action" type="submit">Baixar produto</button>
-    </form>
+    <div id="purchase-downloads" class="purchase-downloads" hidden aria-label="Downloads da compra"></div>
     <form id="purchase-recover" class="article" method="post" hidden>
       <label class="block">
         Código de recuperação
@@ -24,12 +21,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 </BaseLayout>
 
 <script>
+  type PurchaseItem = { id: string; title: string; sku?: string; grant: string | null };
+  type StoredItem = { sku: string };
   const status = document.querySelector<HTMLParagraphElement>('#purchase-status')!;
   const title = document.querySelector<HTMLParagraphElement>('#purchase-title')!;
   const refresh = document.querySelector<HTMLButtonElement>('#purchase-refresh')!;
-  const download = document.querySelector<HTMLFormElement>('#purchase-download')!;
+  const downloads = document.querySelector<HTMLElement>('#purchase-downloads')!;
   const recover = document.querySelector<HTMLFormElement>('#purchase-recover')!;
-  const grant = download.querySelector<HTMLInputElement>('[name="grant"]')!;
   const code = recover.querySelector<HTMLInputElement>('[name="code"]')!;
   let expected = new URLSearchParams(location.search).get('pedido');
 
@@ -46,7 +44,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
   async function load(update = false) {
     refresh.disabled = true;
-    download.hidden = true;
+    downloads.hidden = true;
+    downloads.replaceChildren();
     try {
       if (update) {
         const checked = await fetch('/compras/api/atualizar', { method: 'POST' });
@@ -64,8 +63,24 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       title.textContent = result.title;
       status.textContent = messages[result.status] ?? 'Pedido em análise.';
       refresh.hidden = false;
-      grant.value = result.grant ?? '';
-      download.hidden = !grant.value;
+      const items = Array.isArray(result.items) ? result.items : [];
+      for (const item of items) {
+        if (!item.grant) continue;
+        const form = document.createElement('form');
+        form.method = 'post'; form.action = '/compras/api/download';
+        const grant = document.createElement('input'); grant.type = 'hidden'; grant.name = 'grant'; grant.value = item.grant;
+        const itemId = document.createElement('input'); itemId.type = 'hidden'; itemId.name = 'item'; itemId.value = item.id;
+        const button = document.createElement('button'); button.className = 'action'; button.type = 'submit'; button.textContent = 'Baixar ' + item.title;
+        form.append(grant,itemId,button);
+        downloads.append(form);
+      }
+      downloads.hidden = downloads.childElementCount === 0;
+      if (result.status === 'approved' && items.length) {
+        try {
+          const cart = JSON.parse(localStorage.getItem('mario-store-cart-v1') ?? '[]');
+          if (Array.isArray(cart)) localStorage.setItem('mario-store-cart-v1',JSON.stringify(cart.filter((entry: StoredItem) => !items.some((item: PurchaseItem) => item.sku === entry.sku))));
+        } catch {}
+      }
     } catch {
       status.textContent = 'Não foi possível consultar agora. Tente novamente.';
     } finally {

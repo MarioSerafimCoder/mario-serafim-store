@@ -16,6 +16,7 @@ const markdown = dynamic ? undefined : await renderProductDescription(product);
 const Content = markdown?.Content;
 const faq = markdown?.headings.find(({ text }) => text.toLocaleLowerCase('pt-BR') === 'perguntas frequentes');
 const description = dynamic ? richText(product.data.description) : '';
+const canOfferCheckout = !preview && status === 'published' && priceCents > 0 && !sku.startsWith('DEMO-') && !slug.startsWith('demo-');
 ---
 
 <BaseLayout title={name} description={summary} image={images[0]} noindex={preview}>
@@ -24,63 +25,81 @@ const description = dynamic ? richText(product.data.description) : '';
     <span aria-hidden="true">/</span><span>{category}</span>
   </nav>
 
-  <article>
+  <article class="product-page">
     <div class="product-layout">
       <header class="product-intro">
-        <p class="eyebrow">Produto digital · {category}</p>
-        <h1 class="display">{name}</h1>
-        <p class="lede">{summary}</p>
-        <div class="purchase-panel">
-          {status === 'coming_soon'
-            ? <p class="eyebrow status-label">Em breve</p>
-            : <p class="product-price">{formatPrice(priceCents)}</p>}
-          {!preview && status === 'published' && priceCents > 0 && !sku.startsWith('DEMO-') && !slug.startsWith('demo-') ? (
-            <CheckoutAction sku={sku} priceCents={dynamic ? priceCents : undefined} />
-          ) : (
-            <p class="purchase-state"><span class="signal" aria-hidden="true"></span>Compra indisponível nesta etapa.</p>
-          )}
-        </div>
+        <p class="eyebrow product-category">{category} <span aria-hidden="true">·</span> Produto digital</p>
+        <h1 class="product-title">{name}</h1>
+        <p class="lede product-summary">{summary}</p>
+        <ul class="product-facts" aria-label="Informações principais">
+          {formats.length > 0 && <li><span aria-hidden="true">↳</span><span>{formats.join(', ')}</span></li>}
+          {requirements.length > 0 && <li><span aria-hidden="true">⌘</span><span>{requirements.join(', ')}</span></li>}
+          {license.type && <li><span aria-hidden="true">◇</span><span>{license.type}</span></li>}
+          {version && <li><span aria-hidden="true">#</span><span>Versão {version}</span></li>}
+        </ul>
       </header>
 
       {images.length > 0 && <ProductGallery images={images} />}
 
-      <div class="product-details">
-        <section class="detail-block article">
-          <h2>Conteúdo incluído</h2>
-          <ul>{includes.map((item) => <li>{item}</li>)}</ul>
-        </section>
+      <aside class="purchase-panel" aria-label="Comprar produto">
+        <div class="purchase-heading">
+          <span class="digital-badge"><span aria-hidden="true">↓</span> Produto digital</span>
+          {status === 'coming_soon'
+            ? <p class="eyebrow status-label">Em breve</p>
+            : <p class="product-price">{formatPrice(priceCents)}</p>}
+        </div>
+        {canOfferCheckout ? (
+          <CheckoutAction sku={sku} name={name} slug={slug} priceCents={priceCents} dynamic={dynamic} />
+        ) : (
+          <p class="purchase-state"><span class="signal" aria-hidden="true"></span>{status === 'coming_soon' ? 'Este produto ainda não está disponível.' : 'Compra indisponível nesta etapa.'}</p>
+        )}
+        {canOfferCheckout && <div class="purchase-notes">
+          <p><span aria-hidden="true">↗</span> Pagamento processado pelo Mercado Pago quando o checkout estiver disponível.</p>
+          <p><span aria-hidden="true">↓</span> O acesso digital é liberado após a confirmação do pagamento.</p>
+          <a href="/licencas/" class="text-link tap">Consultar condições de licença</a>
+        </div>}
+      </aside>
 
-        <section class="detail-block">
-          <h2>Formatos e compatibilidade</h2>
+      <div class="product-details">
+        {includes.length > 0 && <section class="detail-block" aria-labelledby="included-heading">
+          <h2 id="included-heading">O que está incluído</h2>
+          <ul class="included-list">{includes.map((item) => <li><span aria-hidden="true">✓</span>{item}</li>)}</ul>
+        </section>}
+
+        {(formats.length > 0 || requirements.length > 0 || version || updatedAt || sku) && <section class="detail-block" aria-labelledby="spec-heading">
+          <h2 id="spec-heading">Especificações</h2>
           <dl class="spec-list">
-            <div><dt>Formatos</dt><dd>{formats.join(', ')}</dd></div>
-            <div><dt>Requisitos de software</dt><dd>{requirements.length > 0 ? requirements.join(', ') : 'Não informados'}</dd></div>
+            {formats.length > 0 && <div><dt>Formatos</dt><dd>{formats.join(', ')}</dd></div>}
+            {requirements.length > 0 && <div><dt>Software necessário</dt><dd>{requirements.join(', ')}</dd></div>}
+            {version && <div><dt>Versão</dt><dd>{version}</dd></div>}
+            {updatedAt && <div><dt>Atualização</dt><dd><time datetime={updatedAt}>{formatDate(updatedAt)}</time></dd></div>}
+            {sku && <div><dt>SKU</dt><dd>{sku}</dd></div>}
           </dl>
-        </section>
+        </section>}
       </div>
     </div>
 
     <div class="store-section product-more">
-      <section class="detail-block article" aria-labelledby="product-description">
+      <section class="detail-block article product-description" aria-labelledby="product-description">
         <h2 id="product-description">Descrição</h2>
-        {faq && <a class="text-link tap" href={`#${faq.slug}`}>Perguntas frequentes</a>}
+        {faq && <a class="text-link tap faq-jump" href={`#${faq.slug}`}>Perguntas frequentes <span aria-hidden="true">↓</span></a>}
         {Content ? <Content /> : <Fragment set:html={description} />}
       </section>
 
       <div class="product-disclosures">
-        <details class="detail-block">
+        <details class="detail-block" open>
           <summary class="tap">Licença de uso</summary>
-          <div class="article">
-            <p><strong>{license.type}</strong></p>
-            <p>{license.summary}</p>
-            <a href="/licencas/" class="text-link tap">Informações de licenciamento</a>
+          <div class="article disclosure-content">
+            {license.type && <p><strong>{license.type}</strong></p>}
+            {license.summary && <p>{license.summary}</p>}
+            <a href="/licencas/" class="text-link tap">Informações completas de licenciamento</a>
           </div>
         </details>
         <details class="detail-block">
           <summary class="tap">Versão e atualização</summary>
           <dl class="spec-list">
-            <div><dt>Versão</dt><dd>{version}</dd></div>
-            <div><dt>Atualização</dt><dd><time datetime={updatedAt}>{formatDate(updatedAt)}</time></dd></div>
+            {version && <div><dt>Versão</dt><dd>{version}</dd></div>}
+            {updatedAt && <div><dt>Atualização</dt><dd><time datetime={updatedAt}>{formatDate(updatedAt)}</time></dd></div>}
             <div><dt>SKU</dt><dd>{sku}</dd></div>
           </dl>
         </details>

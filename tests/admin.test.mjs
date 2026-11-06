@@ -26,7 +26,7 @@ function jwt(override = {}) {
 function database(t) {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
-  for (const file of ['0001_commerce.sql','0002_admin.sql','0003_admin_insights.sql','0004_coupons.sql']) db.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
+  for (const file of ['0001_commerce.sql','0002_admin.sql','0003_admin_insights.sql','0004_coupons.sql','0005_cart_checkout.sql']) db.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
   function statement(sql, args = []) {
     const stmt = db.prepare(sql);
     const values = args.map((value) => value instanceof ArrayBuffer ? new Uint8Array(value) : value);

@@ -1,4 +1,4 @@
-import type { Env, Order } from './types.ts';
+import type { CartLine, CheckoutCart, Env, Order } from './types.ts';
 
 const encoder = new TextEncoder();
 
@@ -66,7 +66,8 @@ export function validProviderId(id: unknown): id is string {
   return typeof id === 'string' && /^ORD[A-Z0-9]{8,60}$/i.test(id);
 }
 
-export function verifyOrder(remote: RemoteOrder, order: Order) {
+export function verifyOrder(remote: RemoteOrder, order: Order | CheckoutCart) {
+  const total = 'total_cents' in order ? order.total_cents : order.price_cents;
   return validProviderId(remote.id)
     && /^ORDTST/i.test(remote.id) === (order.mode === 'test')
     && (!order.remote_id || remote.id.toUpperCase() === order.remote_id.toUpperCase())
@@ -74,19 +75,20 @@ export function verifyOrder(remote: RemoteOrder, order: Order) {
     && remote.external_reference === order.id
     && String(remote.user_id) === order.seller
     && remote.country_code === 'BRA' && remote.currency === order.currency
-    && cents(remote.total_amount) === order.price_cents;
+    && cents(remote.total_amount) === total;
 }
 
-export function paymentState(remote: RemoteOrder, order: Order) {
+export function paymentState(remote: RemoteOrder, order: Order | CheckoutCart) {
+  const total = 'total_cents' in order ? order.total_cents : order.price_cents;
   const payments = remote.transactions?.payments ?? [];
   const credited = payments.filter((payment) =>
     payment.status === 'processed' && payment.status_detail === 'accredited' &&
-    cents(payment.amount) === order.price_cents && /^PAY[A-Z0-9]{8,60}$/i.test(payment.id),
+    cents(payment.amount) === total && /^PAY[A-Z0-9]{8,60}$/i.test(payment.id),
   );
   if (remote.status === 'refunded' || remote.status_detail === 'partially_refunded' ||
       (remote.transactions?.refunds?.length ?? 0) > 0) return { status: 'refunded', payment: null };
   if (remote.status === 'processed' && remote.status_detail === 'accredited') {
-    if (cents(remote.total_paid_amount) === order.price_cents && credited.length === 1) {
+    if (cents(remote.total_paid_amount) === total && credited.length === 1) {
       return { status: 'approved', payment: credited[0].id };
     }
     return { status: 'review', payment: null };
@@ -97,8 +99,11 @@ export function paymentState(remote: RemoteOrder, order: Order) {
   return { status: 'pending', payment: null };
 }
 
-export async function createRemoteOrder(env: Env, order: Order) {
-  const amount = (order.price_cents / 100).toFixed(2);
+export async function createRemoteOrder(env: Env, order: Order | CheckoutCart, cartLines?: CartLine[]) {
+  const total = 'total_cents' in order ? order.total_cents : order.price_cents;
+  const lines = cartLines?.map((line) => ({ title: line.title, unit_price: (line.price_cents / 100).toFixed(2), quantity: 1 }))
+    ?? [{ title: (order as Order).title, unit_price: (total / 100).toFixed(2), quantity: 1 }];
+  const amount = (total / 100).toFixed(2);
   const back = `${env.STORE_ORIGIN}/compras/retorno/${order.id}`;
   const remote = await api(env, '/v1/orders', {
     method: 'POST',
@@ -109,7 +114,7 @@ export async function createRemoteOrder(env: Env, order: Order) {
       expiration_time: 'P1D',
       external_reference: order.id,
       total_amount: amount,
-      items: [{ title: order.title, unit_price: amount, quantity: 1 }],
+      items: lines,
       config: { online: {
         success_url: `${back}/sucesso`, pending_url: `${back}/pendente`, failure_url: `${back}/falha`,
         auto_return: 'all',

@@ -56,4 +56,26 @@ export interface Order {
   provider_updated: number;
   last_check: number;
   created_at: number;
+  cart_id?: string | null;
+}
+
+export interface CheckoutCart {
+  id: string;
+  recovery_hash: string;
+  total_cents: number;
+  currency: 'BRL';
+  mode: 'test' | 'production';
+  seller: string;
+  remote_id: string | null;
+  checkout_url: string | null;
+  payment_id: string | null;
+  status: string;
+  provider_updated: number;
+  last_check: number;
+  created_at: number;
+}
+
+export interface CartLine extends Order {
+  cart_id: string;
+  cart_position: number;
 }

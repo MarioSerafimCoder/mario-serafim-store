@@ -9,14 +9,16 @@ const origin = 'https://store.example';
 const providerId = 'ORDTST01J49MMW3SSBK5PSV3DFR32959';
 const signatureSecret = 'fixture-not-a-real-webhook-secret';
 const product = { sku: 'REAL-1', name: 'Teste de arquivo', priceCents: 1299, currency: 'BRL', version: '1' };
+const productTwo = { sku: 'REAL-2', name: 'Segundo arquivo', priceCents: 800, currency: 'BRL', version: '2' };
 
 test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async (t) => {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   db.exec(readFileSync(new URL('../migrations/0001_commerce.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0005_cart_checkout.sql', import.meta.url), 'utf8'));
   db.prepare('INSERT INTO fulfillment VALUES (?, ?, ?, ?, 1)').run('REAL-1', '1', 'versioned/file.zip', 'produto.zip');
   const env = {
-    ASSETS: { fetch: async () => Response.json([product, { ...product, sku: 'DEMO-1' }]) },
+    ASSETS: { fetch: async () => Response.json([product, productTwo, { ...product, sku: 'DEMO-1' }]) },
     DB: {
       prepare(sql) {
         const stmt = db.prepare(sql);
@@ -162,4 +164,99 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   await notify();
   assert.equal((await state()).grant, null);
   assert.equal((await call(api + '/recuperar', { method: 'POST', body: { code: randomUUID() }, session: false })).status, 404);
+});
+
+test('carrinho valida todos os itens, cria uma única order e entrega cada arquivo após a aprovação', async (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(readFileSync(new URL('../migrations/0001_commerce.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0005_cart_checkout.sql', import.meta.url), 'utf8'));
+  db.prepare('INSERT INTO fulfillment VALUES (?, ?, ?, ?, 1)').run(product.sku, product.version, 'real-1.zip', 'real-1.zip');
+  db.prepare('INSERT INTO fulfillment VALUES (?, ?, ?, ?, 1)').run(productTwo.sku, productTwo.version, 'real-2.zip', 'real-2.zip');
+  const env = {
+    ASSETS: { fetch: async () => Response.json([product,productTwo]) },
+    DB: {
+      prepare(sql) {
+        const stmt = db.prepare(sql);
+        return {
+          bind(...values) {
+            return {
+              first: async () => stmt.get(...values) ?? null,
+              all: async () => ({ results: stmt.all(...values) }),
+              run: async () => stmt.run(...values),
+            };
+          },
+        };
+      },
+      async batch(statements) {
+        db.exec('BEGIN');
+        try { const result=[]; for (const statement of statements) result.push(await statement.run()); db.exec('COMMIT'); return result; }
+        catch (failure) { db.exec('ROLLBACK'); throw failure; }
+      },
+    },
+    FILES: { head: async (key) => ['real-1.zip','real-2.zip'].includes(key) ? {} : null,
+      get: async (key) => ['real-1.zip','real-2.zip'].includes(key) ? {body:new Response(key).body,size:key.length} : null },
+    CHECKOUT_ENABLED:'true',MP_MODE:'test',MP_SELLER_ID:'123',STORE_ORIGIN:origin,
+    MP_ACCESS_TOKEN:'fixture-not-a-token',MP_WEBHOOK_SECRET:signatureSecret,STORE_SESSION_SECRET:'fixture-not-a-real-session-secret-32',
+  };
+  const mpId = 'ORDTST01J49MMW3SSBK5PSV3DFR32960';
+  let remote;
+  t.mock.method(globalThis,'fetch',async (url,options) => {
+    if (url === 'https://api.mercadopago.com/v1/orders') {
+      const body=JSON.parse(options.body);
+      assert.equal(body.total_amount,'20.99');
+      assert.deepEqual(body.items,[{title:product.name,unit_price:'12.99',quantity:1},{title:productTwo.name,unit_price:'8.00',quantity:1}]);
+      assert.equal(options.headers['x-idempotency-key'],body.external_reference);
+      remote={id:mpId,type:'online',processing_mode:'manual',external_reference:body.external_reference,
+        total_amount:'20.99',total_paid_amount:'0.00',user_id:'123',country_code:'BRA',currency:'BRL',status:'created',status_detail:'created',
+        last_updated_date:'2026-11-06T10:00:00Z',checkout_url:'https://www.mercadopago.com.br/checkout/v1/redirect?order_id='+mpId};
+      return Response.json(remote);
+    }
+    assert.equal(url,'https://api.mercadopago.com/v1/orders/'+mpId);
+    return Response.json(remote);
+  });
+  let cookie='';
+  const call=(path,{method='GET',body,session=true,headers={}}={})=>{
+    const form=body instanceof URLSearchParams;
+    return worker.fetch(new Request(origin+path,{method,headers:{...(method==='POST'&&{origin}),...(session&&cookie&&{cookie}),
+      ...(body&&!form&&{'content-type':'application/json'}),...(form&&{'content-type':'application/x-www-form-urlencoded'}),...headers},
+      body:form?body:body?JSON.stringify(body):undefined}),env);
+  };
+  const api='/compras/api';
+  const code=randomUUID();
+  const items=[{sku:product.sku,expectedPriceCents:product.priceCents},{sku:productTwo.sku,expectedPriceCents:productTwo.priceCents}];
+  assert.equal((await call(api+'/checkout-carrinho',{method:'POST',body:{code,items:[...items,{...items[0]}]}})).status,400);
+  assert.equal((await call(api+'/checkout-carrinho',{method:'POST',body:{code:randomUUID(),items:items.map((item,index)=>({...item,expectedPriceCents:index?800:1}))}})).status,412);
+  const response=await call(api+'/checkout-carrinho',{method:'POST',body:{code,items}});
+  assert.equal(response.status,200);
+  const checkout=await response.json();
+  cookie=response.headers.get('set-cookie').split(';')[0];
+  const retry=await call(api+'/checkout-carrinho',{method:'POST',body:{code,items}});
+  assert.equal(retry.status,200,await retry.text());
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM checkout_carts').get().n,1);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM orders WHERE cart_id=?').get(checkout.id).n,2);
+  const state=await (await call(api+'/pedido')).json();
+  assert.equal(state.status,'created');
+  assert.equal(state.items.length,2);
+  assert.ok(state.items.every((item)=>item.grant===null));
+
+  const notify=async()=>{
+    const stamp=Math.floor(Date.now()/1000),requestId='cart-webhook';
+    const value=createHmac('sha256',signatureSecret).update(`id:${mpId};request-id:${requestId};ts:${stamp};`).digest('hex');
+    return call(api+'/webhook?data.id='+mpId,{method:'POST',session:false,
+      headers:{'x-request-id':requestId,'x-signature':`ts=${stamp},v1=${value}`}});
+  };
+  Object.assign(remote,{status:'processed',status_detail:'accredited',total_paid_amount:'20.99',last_updated_date:'2026-11-06T10:01:00Z',
+    transactions:{payments:[{id:'PAY01J67CQQH5904WDBVZEM4JMEP4',amount:'20.99',status:'processed',status_detail:'accredited'}]}});
+  assert.equal((await notify()).status,200);
+  const approved=await (await call(api+'/pedido')).json();
+  assert.equal(approved.status,'approved');
+  assert.ok(approved.items.every((item)=>item.grant));
+  for (const item of approved.items) {
+    const result=await call(api+'/download',{method:'POST',body:new URLSearchParams({grant:item.grant,item:item.id})});
+    assert.equal(result.status,200);
+    assert.match(await result.text(),/real-[12]\.zip/);
+  }
+  const recovery=await call(api+'/recuperar',{method:'POST',body:{code:randomUUID()},session:false});
+  assert.equal(recovery.status,404);
 });
