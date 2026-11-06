@@ -68,4 +68,5 @@ export default {
     return new Response(response.body,{status:response.status,headers});
   },
   scheduled: commerce.scheduled,
+  queue: commerce.queue,
 };
