@@ -1,6 +1,6 @@
 # Checkout e entrega digital
 
-A vitrine Astro continua estática. O Worker intercepta `/compras/api/*` e `/compras/retorno/*`. O catálogo de compra é derivado dos produtos publicados e exclui SKUs `DEMO-*` e slugs `demo-*`. O preço e o arquivo são validados no servidor antes de criar o pedido.
+A vitrine Astro e o checkout leem o mesmo catálogo D1 nos Workers publicados. O Worker intercepta `/compras/api/*` e `/compras/retorno/*`. O catálogo de compra exclui SKUs `DEMO-*` e slugs `demo-*`. O preço e o arquivo são validados antes de criar o pedido. Quando o preço visto pelo comprador diverge do D1, o Worker pede que ele recarregue a página.
 
 A aplicação `Check-out-pro` usa Checkout Pro com a API de Orders. Use a [documentação da integração](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-orders/overview) e a [referência de webhooks](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-orders/notifications?scope=prod).
 
@@ -8,11 +8,11 @@ A aplicação `Check-out-pro` usa Checkout Pro com a API de Orders. Use a [docum
 
 - Execute `npm ci`, `npm run check`, `npm run build` e `npm test`.
 - Use `wrangler d1 migrations apply DB --env homologacao --remote` para aplicar migrations.
-- Publique com `wrangler deploy --env homologacao`. O ambiente começa com `CHECKOUT_ENABLED=false`.
+- Publique com `npm run deploy:homologacao`. O ambiente começa com `CHECKOUT_ENABLED=false`.
 - No painel Mercado Pago, configure o evento **Order (Mercado Pago)** no ambiente **Teste** e a URL `https://mario-serafim-store-homologacao.marioserafim-da.workers.dev/compras/api/webhook`.
 - Defina `MP_SELLER_ID` com o ID do vendedor do ambiente. Instale `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` e `STORE_SESSION_SECRET` por `wrangler secret put <NOME> --env homologacao` ou pelo painel da Cloudflare. Use valores distintos em produção. A chave de sessão deve ter pelo menos 32 caracteres aleatórios. Guarde o token no cofre do Worker.
 - Use a credencial de vendedor de teste indicada para **Checkout Pro com Orders** e um comprador de teste separado. Confirme o ID do vendedor, o prefixo da order de teste, o retorno e o webhook com uma compra simulada oficial antes de habilitar produção.
-- Quando o R2 estiver disponível, use um bucket privado exclusivo para homologação e vincule-o como `FILES`. Cadastre um produto de homologação apenas no build desse ambiente, envie seu arquivo ao bucket e habilite o SKU em `fulfillment`. Só então habilite `CHECKOUT_ENABLED` em homologação.
+- Quando o R2 estiver disponível, use um bucket privado exclusivo para homologação e vincule-o como `FILES`. Cadastre um produto no painel desse ambiente, envie seu arquivo e permita novas entregas. Só então habilite `CHECKOUT_ENABLED` em homologação.
 
 ## Produção e operação
 

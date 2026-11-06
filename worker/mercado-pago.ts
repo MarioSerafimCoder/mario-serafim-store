@@ -47,7 +47,7 @@ interface RemoteOrder {
 async function api(env: Env, path: string, options: RequestInit = {}): Promise<RemoteOrder> {
   const response = await fetch(`https://api.mercadopago.com${path}`, {
     ...options,
-    redirect: 'error',
+    redirect: 'manual',
     signal: AbortSignal.timeout(8000),
     headers: { authorization: `Bearer ${env.MP_ACCESS_TOKEN}`, accept: 'application/json', ...options.headers },
   });

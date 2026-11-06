@@ -17,7 +17,7 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
   const project = await mkdtemp(join(await realpath(tmpdir()), 'mario-store-test-'));
   t.after(() => rm(project, { recursive: true, force: true }));
 
-  for (const file of ['src', 'public', 'package.json', 'package-lock.json', 'tsconfig.json', 'astro.config.mjs']) {
+  for (const file of ['src', 'public', 'worker', 'package.json', 'package-lock.json', 'tsconfig.json', 'astro.config.mjs']) {
     await cp(join(root, file), join(project, file), { recursive: true });
   }
 

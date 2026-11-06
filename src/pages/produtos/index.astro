@@ -3,7 +3,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import ProductTile from '../../components/ProductTile.astro';
 import { getPublicProducts } from '../../lib/shop';
 
-const products = await getPublicProducts();
+const products = await getPublicProducts(Astro.locals.storeDB);
 const categories = [...new Set(products.map(({ data }) => data.category))]
   .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 ---

@@ -1,0 +1,20 @@
+---
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+interface Props {
+  image: { src: ImageMetadata | string; alt: string; width?: number; height?: number };
+  limit: number;
+  widths?: number[];
+  sizes?: string;
+  loading?: 'eager' | 'lazy';
+  fetchpriority?: 'high' | 'auto';
+  class?: string;
+  decorative?: boolean;
+}
+const { image, limit, decorative, ...attributes } = Astro.props;
+const alt = decorative ? '' : image.alt;
+---
+{typeof image.src === 'string'
+  ? <img src={image.src} alt={alt} width={image.width} height={image.height} class={attributes.class}
+      loading={attributes.loading ?? 'lazy'} fetchpriority={attributes.fetchpriority} decoding="async" />
+  : <Image {...attributes} src={image.src} alt={alt} width={Math.min(image.src.width,limit)} format="webp" />}

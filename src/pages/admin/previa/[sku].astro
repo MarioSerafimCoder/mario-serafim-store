@@ -1,0 +1,18 @@
+---
+import ProductDetail from '../../../components/ProductDetail.astro';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { toProduct, skuPattern, type ProductRow } from '../../../../worker/catalog';
+
+export const getStaticPaths: () => { params: { sku: string } }[] = () => [];
+
+const sku = Astro.params.sku ?? '';
+const row = Astro.locals.adminPreview && skuPattern.test(sku) && sku.length <= 80
+  ? await Astro.locals.storeDB?.prepare('SELECT * FROM products WHERE sku=?').bind(sku).first<ProductRow>()
+  : null;
+const product = row && toProduct(row);
+if (product) {
+  product.data.images = product.data.images.map(image => ({ ...image, src: image.src.startsWith('/midia/') ? '/admin' + image.src : image.src }));
+} else Astro.response.status = 404;
+---
+{product ? <ProductDetail product={product} related={[]} preview /> :
+  <BaseLayout title="Prévia indisponível" noindex><h1>Produto não encontrado</h1></BaseLayout>}

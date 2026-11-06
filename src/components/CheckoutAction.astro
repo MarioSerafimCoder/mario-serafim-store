@@ -1,12 +1,13 @@
 ---
 interface Props {
   sku: string;
+  priceCents?: number;
 }
 
-const { sku } = Astro.props;
+const { sku, priceCents } = Astro.props;
 ---
 
-<store-checkout data-sku={sku}>
+<store-checkout data-sku={sku} data-price-cents={priceCents}>
   <p class="purchase-state"><span class="signal" aria-hidden="true"></span>Compra indisponível nesta etapa.</p>
   <button type="button" class="action" hidden>Comprar com Mercado Pago</button>
   <p role="status"></p>
@@ -36,6 +37,11 @@ const { sku } = Astro.props;
         .then((response) => response.ok ? response.json() : null)
         .catch(() => null);
       if (availability?.available !== true) return;
+      const expectedPriceCents = this.dataset.priceCents === undefined ? undefined : Number(this.dataset.priceCents);
+      if (expectedPriceCents !== undefined && availability.priceCents !== expectedPriceCents) {
+        status.textContent = 'O preço mudou. Recarregue a página.';
+        return;
+      }
 
       const key = `store-checkout:${sku}`;
       let code = crypto.randomUUID();
@@ -54,7 +60,7 @@ const { sku } = Astro.props;
           const response = await fetch('/compras/api/checkout', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ sku, code }),
+            body: JSON.stringify({ sku, code, expectedPriceCents }),
           });
           const result = await response.json();
           if (!response.ok) {

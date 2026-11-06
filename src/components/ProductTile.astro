@@ -1,5 +1,5 @@
 ---
-import { Image } from 'astro:assets';
+import StoreImage from './StoreImage.astro';
 import { productUrl, type Product } from '../lib/shop';
 import { formatPrice } from '../lib/format';
 
@@ -13,13 +13,11 @@ const { category, formats, images: [cover], name, priceCents, status, summary } 
 
 <article class="product-tile">
   <a href={productUrl(product)} class="tile-link">
-    <Image
-      src={cover.src}
-      alt={cover.alt}
-      width={Math.min(cover.src.width, 900)}
+    <StoreImage
+      image={cover}
+      limit={900}
       widths={[300, 600, 900]}
       sizes="(min-width: 58rem) 30vw, (min-width: 42rem) 46vw, 92vw"
-      format="webp"
       class="tile-image"
     />
     <div class="tile-copy">

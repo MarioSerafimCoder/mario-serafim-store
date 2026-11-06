@@ -1,5 +1,5 @@
 interface Statement {
-  bind(...values: (string | number | null)[]): Statement;
+  bind(...values: (string | number | null | ArrayBuffer)[]): Statement;
   first<T>(): Promise<T | null>;
   all<T>(): Promise<{ results: T[] }>;
   run(): Promise<unknown>;
@@ -7,11 +7,17 @@ interface Statement {
 
 export interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
-  DB?: { prepare(sql: string): Statement };
+  DB?: { prepare(sql: string): Statement; batch(statements: Statement[]): Promise<{ results: unknown[] }[]> };
   FILES?: {
     head(key: string): Promise<unknown>;
     get(key: string): Promise<{ body: ReadableStream; size: number } | null>;
+    put?(key: string, value: ArrayBuffer): Promise<unknown>;
   };
+  DYNAMIC_CATALOG?: string;
+  RELEASE?: { id: string };
+  ADMIN_ACCESS_ISSUER?: string;
+  ADMIN_ACCESS_AUD?: string;
+  ADMIN_EMAIL?: string;
   STORE_ORIGIN?: string;
   CHECKOUT_ENABLED?: string;
   MP_MODE?: 'test' | 'production';

@@ -1,5 +1,7 @@
 # Mário Serafim Store · Etapa 1
 
+O catálogo operacional e o painel do proprietário usam D1 e Cloudflare Access. Consulte o [guia atual da administração](ADMIN.md). As seções abaixo registram a base estática e a demonstração histórica.
+
 ## Base técnica
 
 - Astro estático, TypeScript, Tailwind CSS e Content Collections. A compilação gera `dist/`.

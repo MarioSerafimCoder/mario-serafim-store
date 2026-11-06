@@ -1,5 +1,6 @@
 import { createRemoteOrder, getRemoteOrder, hex, hmacKey, paymentState, validProviderId, validWebhook, verifyHmac, verifyOrder } from './mercado-pago.ts';
 import type { Env, Order, Product } from './types.ts';
+import { catalogOffer } from './catalog.ts';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const skuPattern = /^[A-Z0-9]+(?:-[A-Z0-9]+)*$/;
@@ -80,6 +81,12 @@ async function session(request: Request, env: Ready) {
 
 async function available(env: Ready, sku: string) {
   if (env.CHECKOUT_ENABLED !== 'true' || !env.MP_WEBHOOK_SECRET || !env.FILES || sku.startsWith('DEMO-')) return null;
+  if (env.DYNAMIC_CATALOG === 'true') {
+    const offer = await catalogOffer(env.DB, sku);
+    if (!offer || !await env.FILES.head(offer.object_key)) return null;
+    const { object_key, filename, ...product } = offer;
+    return { product, file: { object_key, filename } };
+  }
   const res = await env.ASSETS.fetch(new Request(`${env.STORE_ORIGIN}/catalogo-compras.json`));
   if (!res.ok) return null;
   const catalog = await res.json() as Product[];
@@ -93,7 +100,9 @@ async function available(env: Ready, sku: string) {
 
 async function checkout(request: Request, env: Ready) {
   const body = await readBody(request);
-  if (!body || Object.keys(body).length !== 2 || typeof body.sku !== 'string' || !skuPattern.test(body.sku)
+  const dynamic = env.DYNAMIC_CATALOG === 'true';
+  if (!body || Object.keys(body).length !== (dynamic ? 3 : 2) || (dynamic && !Number.isSafeInteger(body.expectedPriceCents))
+      || typeof body.sku !== 'string' || !skuPattern.test(body.sku)
       || body.sku.length > 80 || typeof body.code !== 'string' || !uuid.test(body.code)) {
     return error('Dados de compra inválidos.', 400);
   }
@@ -106,16 +115,28 @@ async function checkout(request: Request, env: Ready) {
     const offer = await available(env, body.sku);
     if (!offer) return error('Produto indisponível para compra.', 404);
     const { product, file } = offer;
-    await env.DB.prepare(`
+    if (dynamic && body.expectedPriceCents !== product.priceCents) return error('O preço mudou. Recarregue a página.', 412);
+    const snapshot = [crypto.randomUUID(), recoveryHash, product.sku, product.name.slice(0, 127), product.priceCents,
+      product.currency, file.object_key, file.filename, env.MP_MODE, env.MP_SELLER_ID, now()];
+    if (dynamic) {
+      await env.DB.prepare(`
+        INSERT INTO orders(id, recovery_hash, sku, title, price_cents, currency, object_key, filename, mode, seller, created_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM products p
+        JOIN fulfillment f ON f.sku=p.sku AND f.version=p.version AND f.enabled=1
+        WHERE p.sku=? AND p.status='published' AND p.price_cents=? AND p.version=? AND p.name=? AND f.object_key=?
+        ON CONFLICT(recovery_hash) DO NOTHING
+      `).bind(...snapshot,product.sku,product.priceCents,product.version,product.name,file.object_key).run();
+    } else await env.DB.prepare(`
       INSERT INTO orders(id, recovery_hash, sku, title, price_cents, currency, object_key, filename, mode, seller, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(recovery_hash) DO NOTHING
-    `).bind(crypto.randomUUID(), recoveryHash, product.sku, product.name.slice(0, 127), product.priceCents, product.currency,
-      file.object_key, file.filename, env.MP_MODE, env.MP_SELLER_ID, now()).run();
+    `).bind(...snapshot).run();
     order = await find();
+    if (dynamic && !order) return error('O produto mudou. Recarregue a página.', 412);
   }
   if (!order || order.sku !== body.sku || order.mode !== env.MP_MODE || order.seller !== env.MP_SELLER_ID) {
     return error('Essa tentativa de compra pertence a outro pedido.', 409);
   }
+  if (dynamic && order.price_cents !== body.expectedPriceCents) return error('Há um pedido anterior com outro preço. Consulte-o antes de continuar.', 409);
   if (order.created_at + 86400 <= now() || !['created', 'pending'].includes(order.status)) {
     return error('Acesse seu pedido para consultar o pagamento.', 409);
   }
@@ -216,7 +237,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (request.method === 'POST' && request.headers.get('origin') !== env.STORE_ORIGIN) return error('Origem inválida.', 403);
   if (route === '/compras/api/disponibilidade' && request.method === 'GET') {
     const sku = url.searchParams.get('sku') ?? '';
-    return json({ available: sku.length <= 80 && skuPattern.test(sku) && Boolean(await available(env, sku)) });
+    const offer = sku.length <= 80 && skuPattern.test(sku) ? await available(env, sku) : null;
+    return json({ available: Boolean(offer), ...(env.DYNAMIC_CATALOG === 'true' && offer ? { priceCents: offer.product.priceCents } : {}) });
   }
   if (route === '/compras/api/checkout' && request.method === 'POST') return checkout(request, env);
   if (route === '/compras/api/recuperar' && request.method === 'POST') return recover(request, env);

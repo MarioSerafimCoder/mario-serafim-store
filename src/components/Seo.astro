@@ -6,18 +6,18 @@ import { site } from '../config/site';
 export interface Props {
   title?: string;
   description?: string;
-  image?: { src: ImageMetadata; alt: string };
+  image?: { src: ImageMetadata | string; alt: string; width?: number; height?: number };
   noindex?: boolean;
 }
 
 const { title, description = site.description, image, noindex = false } = Astro.props;
 const fullTitle = title ? `${title} · ${site.name}` : `${site.name} · ${site.tagline}`;
 const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url);
-const shared = image && await getImage({
+const shared = image && (typeof image.src === 'string' ? { src: image.src, attributes: image } : await getImage({
   src: image.src,
   width: Math.min(image.src.width, 1200),
   format: 'jpg',
-});
+}));
 ---
 
 <meta charset="utf-8" />

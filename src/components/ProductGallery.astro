@@ -1,9 +1,9 @@
 ---
-import { Image } from 'astro:assets';
+import StoreImage from './StoreImage.astro';
 import type { ImageMetadata } from 'astro';
 
 interface Props {
-  images: { src: ImageMetadata; alt: string }[];
+  images: { src: ImageMetadata | string; alt: string; width?: number; height?: number }[];
 }
 
 const { images } = Astro.props;
@@ -13,14 +13,12 @@ const { images } = Astro.props;
   <ul class="gallery-views">
     {images.map((image, index) => (
       <li data-view>
-        <a href={image.src.src} class="gallery-preview" data-zoom>
-          <Image
-            src={image.src}
-            alt={image.alt}
-            width={Math.min(image.src.width, 1024)}
+        <a href={typeof image.src === 'string' ? image.src : image.src.src} class="gallery-preview" data-zoom>
+          <StoreImage
+            image={image}
+            limit={1024}
             widths={[400, 800, 1024]}
             sizes="(min-width: 58rem) 48vw, 92vw"
-            format="webp"
             loading={index === 0 ? 'eager' : 'lazy'}
             fetchpriority={index === 0 ? 'high' : 'auto'}
             class="gallery-image"
@@ -36,7 +34,7 @@ const { images } = Astro.props;
       {images.map((image, index) => (
         <li>
           <button type="button" aria-label={`Exibir prévia ${index + 1}: ${image.alt}`} aria-pressed={index === 0} data-thumb>
-            <Image src={image.src} alt="" width={Math.min(image.src.width, 144)} format="webp" />
+            <StoreImage image={image} limit={144} decorative />
           </button>
         </li>
       ))}

@@ -1,17 +1,26 @@
 {
   "$schema": "https://unpkg.com/wrangler/config-schema.json",
-  "name": "mario-serafim-store",
+  "name": "mario-serafim-store-demo-ed0faa",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "loja.marioserafim.com.br", "custom_domain": true }],
+  "version_metadata": { "binding": "RELEASE" },
+  "d1_databases": [{ "binding": "DB", "database_name": "mario-serafim-store-producao", "database_id": "06065665-4d3e-439a-8230-505af060ad3c" }],
   "compatibility_date": "2026-11-05",
-  "main": "./worker/index.ts",
+  "main": "./worker/runtime.ts",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/compras/api/*", "/compras/retorno/*"],
+    "run_worker_first": ["/", "/produtos", "/produtos/*", "/sitemap-index.xml", "/sitemap-0.xml", "/midia/*", "/admin", "/admin/*", "/compras/api/*", "/compras/retorno/*"],
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },
   "vars": {
     "CHECKOUT_ENABLED": "false",
+    "DYNAMIC_CATALOG": "true",
+    "ADMIN_ACCESS_ISSUER": "https://wispy-hall-9782.cloudflareaccess.com",
+    "ADMIN_ACCESS_AUD": "deb08711f50495f667abcf014262085c206a4c3ceefe5e39f1cdcb207fdde789",
     "MP_MODE": "production",
     "STORE_ORIGIN": "https://loja.marioserafim.com.br"
   },
@@ -19,8 +28,14 @@
     "homologacao": {
       "name": "mario-serafim-store-homologacao",
       "workers_dev": true,
+      "preview_urls": false,
+      "routes": [],
+      "version_metadata": { "binding": "RELEASE" },
       "vars": {
         "CHECKOUT_ENABLED": "false",
+        "DYNAMIC_CATALOG": "true",
+        "ADMIN_ACCESS_ISSUER": "https://wispy-hall-9782.cloudflareaccess.com",
+        "ADMIN_ACCESS_AUD": "42189fa4211877b3e646914b03d9ef001b31d86c35aee1a69981d3d0fdca7d12",
         "MP_MODE": "test",
         "STORE_ORIGIN": "https://mario-serafim-store-homologacao.marioserafim-da.workers.dev"
       },
