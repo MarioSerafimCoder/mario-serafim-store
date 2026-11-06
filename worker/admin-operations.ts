@@ -5,9 +5,10 @@ import type { Env } from './types.ts';
 export async function operations(env: Env, db: StoreDB) {
   const [schema,catalog,file] = await Promise.all([
     db.prepare(`SELECT
-      (SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name IN ('products','orders','fulfillment','order_events','coupons','store_settings')) AS tables,
-      (SELECT COUNT(*) FROM pragma_table_info('orders') WHERE name IN ('coupon_code','discount_cents','buyer_email','category_at_purchase')) AS fields`)
-      .first<{tables:number;fields:number}>(),
+      (SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name IN ('products','orders','fulfillment','order_events','coupons','store_settings','checkout_carts')) AS tables,
+      (SELECT COUNT(*) FROM pragma_table_info('orders') WHERE name IN ('coupon_code','discount_cents','buyer_email','category_at_purchase','cart_id','cart_position')) AS fields,
+      (SELECT COUNT(*) FROM pragma_table_info('store_settings') WHERE name IN ('legal_name','legal_id','legal_address','legal_email','legal_phone')) AS identity_fields`)
+      .first<{tables:number;fields:number;identity_fields:number}>(),
     db.prepare(`SELECT COUNT(CASE WHEN status='published' THEN 1 END) AS published,
       COUNT(CASE WHEN status='coming_soon' THEN 1 END) AS soon,COUNT(CASE WHEN status='draft' THEN 1 END) AS drafts
       FROM products`).first<{published:number;soon:number;drafts:number}>(),
@@ -17,7 +18,7 @@ export async function operations(env: Env, db: StoreDB) {
   ]);
   const configured = Boolean(env.MP_ACCESS_TOKEN && env.MP_WEBHOOK_SECRET && /^\d+$/.test(env.MP_SELLER_ID ?? '') &&
     (env.STORE_SESSION_SECRET?.length ?? 0)>=32);
-  const schemaReady = schema?.tables===6 && schema.fields===4;
+  const schemaReady = schema?.tables===7 && schema.fields===6 && schema.identity_fields===5;
   let fileStatus = env.FILES ? 'Vínculo ativo. Nenhum arquivo de venda para consultar.' : 'R2 indisponível neste ambiente.';
   let fileVerified = false;
   if (env.FILES && file) {

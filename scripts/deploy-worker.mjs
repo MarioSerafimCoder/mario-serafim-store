@@ -1,9 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const target = process.argv[2];
 const staging = target === 'homologacao';
 if (!staging && target !== 'producao') throw new Error('Informe homologacao ou producao.');
+const dryRun = process.argv[3] === '--dry-run';
+if (process.argv.length > (dryRun ? 4 : 3)) throw new Error('Opção de deploy inválida.');
 const env = { ...process.env };
 delete env.CLOUDFLARE_ENV;
 
@@ -12,6 +14,8 @@ function run(args, environment = env) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+run(['node_modules/astro/bin/astro.mjs', 'check']);
+run(['--test', ...readdirSync('tests').filter(name => name.endsWith('.test.mjs')).map(name => 'tests/' + name)]);
 run(['node_modules/astro/bin/astro.mjs', 'build', '--config', 'astro.runtime.config.mjs'],
   staging ? { ...env, CLOUDFLARE_ENV: 'homologacao' } : env);
 
@@ -27,4 +31,4 @@ if (built.name !== expected.worker || built.vars?.MP_MODE !== expected.mode ||
     (staging ? Boolean(built.routes?.length) : !productionRoute)) {
   throw new Error('O Worker, o banco ou o domínio do build não correspondem ao ambiente de destino.');
 }
-run(['node_modules/wrangler/bin/wrangler.js','deploy','--config',config]);
+run(['node_modules/wrangler/bin/wrangler.js','deploy','--config',config,...(dryRun ? ['--dry-run'] : [])]);
