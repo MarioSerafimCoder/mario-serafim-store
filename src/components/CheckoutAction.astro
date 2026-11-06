@@ -36,6 +36,7 @@ const thumbnail = typeof image?.src === 'string' ? image.src : image
 
 <script>
   import { getAvailability, readCart, writeCart } from '../lib/cart';
+  import { checkoutCode } from '../lib/checkout';
   import { formatPrice } from '../lib/format';
 
   class StoreCheckout extends HTMLElement {
@@ -110,8 +111,7 @@ const thumbnail = typeof image?.src === 'string' ? image.src : image
         pending = buyButton.disabled = true;
         status.textContent = 'Preparando seu pedido…';
         const key = 'store-checkout:' + sku + ':' + priceCents + (discount ? ':' + discount.coupon : '');
-        let code: string = crypto.randomUUID();
-        try { code = sessionStorage.getItem(key) ?? code; sessionStorage.setItem(key, code); } catch {}
+        const code = checkoutCode(key);
         try {
           const response = await fetch('/compras/api/checkout', {
             method: 'POST', headers: { 'content-type': 'application/json' },

@@ -43,6 +43,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
 <script>
   import { getAvailability, onCartChange, productCount, readCart, writeCart } from '../../lib/cart';
+  import { checkoutCode } from '../../lib/checkout';
   import { formatPrice } from '../../lib/format';
 
   const heading = document.querySelector<HTMLElement>('#basket-heading')!;
@@ -154,8 +155,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       const fingerprint = selected.map((item) =>
         [item.sku, item.priceCents, item.coupon ?? '', item.expectedTotalCents ?? ''].join(':')).join('|');
       const key = 'store-cart-checkout:' + fingerprint;
-      let code: string = crypto.randomUUID();
-      try { code = sessionStorage.getItem(key) ?? code; sessionStorage.setItem(key, code); } catch {}
+      const code = checkoutCode(key);
       const response = await fetch('/compras/api/checkout-carrinho', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
