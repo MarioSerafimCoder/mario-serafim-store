@@ -117,5 +117,7 @@ export function filePage(files: {sku:string;version:string;filename:string;enabl
 
 export function settingsPage(settings: Settings) {
   return `<form class="panel" method="post" data-settings><h2>Loja e preferências</h2>${input('announcement','Aviso na página inicial',settings.announcement,'maxlength="180"')}${input('support','URL pública de atendimento',settings.support_url,'type="url" maxlength="400"')}
+  <h2>Identificação comercial</h2><p>Esses dados podem aparecer publicamente nas informações da loja. Preencha somente dados corretos e validados; deixe em branco enquanto estiverem pendentes.</p>
+  ${input('legal_name','Nome ou razão social',settings.legal_name,'maxlength="160"')}${input('legal_id','CPF ou CNPJ',settings.legal_id,'maxlength="32" autocomplete="off"')}${input('legal_address','Endereço comercial completo',settings.legal_address,'maxlength="300" autocomplete="street-address"')}${input('legal_email','E-mail de contato',settings.legal_email,'type="email" maxlength="254" autocomplete="email"')}${input('legal_phone','Telefone de contato (opcional)',settings.legal_phone,'type="tel" maxlength="40" autocomplete="tel"')}
   <label>Período inicial do dashboard <select name="period">${[7,30,90].map(n=>`<option value="${n}"${settings.period===n?' selected':''}>${n} dias</option>`).join('')}</select></label><button class="primary">Salvar configurações</button></form>`;
 }

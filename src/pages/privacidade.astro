@@ -1,10 +1,39 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import CommercialIdentity from '../components/CommercialIdentity.astro';
 ---
 
 <BaseLayout title="Privacidade" noindex>
   <article class="article page-intro">
+    <p class="eyebrow">Versão preliminar para homologação</p>
     <h1 class="display">Privacidade</h1>
-    <p>O pagamento é processado pelo Mercado Pago. Quando o provedor informa um e-mail na confirmação do pagamento, a loja usa esse dado para identificar pedidos e prestar atendimento. O e-mail fica restrito à administração da loja.</p>
+    <p class="lede">Esta página resume os tratamentos encontrados na implementação atual da loja. A qualificação do controlador e os prazos de retenção precisam de validação antes da abertura comercial.</p>
+
+    <h2>Quem trata os dados</h2>
+    <p>O responsável pela loja é apresentado publicamente como Mário Serafim. A identificação cadastral completa, o endereço e o e-mail para assuntos de privacidade ainda aguardam preenchimento e validação. A Cloudflare fornece a infraestrutura de entrega do site, Worker, banco D1, armazenamento R2 e autenticação administrativa. O Mercado Pago processa pagamentos.</p>
+
+    <h2>Dados tratados e finalidades</h2>
+    <ul>
+      <li><strong>Navegação:</strong> o provedor de infraestrutura pode processar dados técnicos de conexão e requisições para entregar o site, proteger o serviço e diagnosticar falhas. A configuração e a retenção desses registros pelo provedor dependem dos serviços contratados.</li>
+      <li><strong>Compra:</strong> a loja registra produto, SKU, preço, moeda, identificadores do pedido e do Mercado Pago, estado do pagamento e datas necessárias para conciliar o pedido e liberar ou revogar downloads.</li>
+      <li><strong>Recuperação e acesso:</strong> a chave de recuperação é usada para localizar o pedido, e a sessão da compra é mantida por cookie restrito ao caminho de compras. A chave não é armazenada em texto claro no banco. O código do fluxo individual fica no armazenamento de sessão do navegador para retomar o processo naquela sessão.</li>
+      <li><strong>E-mail do comprador:</strong> quando o Mercado Pago retorna um e-mail após a aprovação, a loja o registra para identificar o pedido e prestar atendimento. A loja não pede e-mail em um formulário próprio.</li>
+      <li><strong>Administração:</strong> o painel é protegido pelo Cloudflare Access e registra ações administrativas para operação e auditoria.</li>
+    </ul>
+
+    <h2>Pagamento e compartilhamento</h2>
+    <p>Ao iniciar o pagamento, o navegador segue para o Mercado Pago. O comprador informa os dados de pagamento diretamente ao provedor. A loja recebe identificadores, status e, quando disponível após a aprovação, o e-mail retornado pelo provedor; a implementação não coleta o número do cartão. A loja também depende da Cloudflare para hospedagem, entrega, banco, armazenamento privado e proteção administrativa.</p>
+
+    <h2>Armazenamento no navegador</h2>
+    <p>O tema escolhido e os itens do carrinho usam armazenamento local do navegador. O código de recuperação do checkout individual usa armazenamento de sessão. Após a criação do pedido, a loja usa o cookie técnico `store_session`, com atributos `HttpOnly`, `Secure` e `SameSite=Lax`, restrito a `/compras/` e com duração configurada de 24 horas. O painel administrativo pode usar os mecanismos de sessão do Cloudflare Access. Não foi encontrada integração de Google Analytics ou outra ferramenta de analytics no código atual.</p>
+
+    <h2>Bases, retenção e segurança</h2>
+    <p>O tratamento ligado ao pedido e à entrega é necessário para realizar as etapas solicitadas na compra. Registros também podem ser mantidos para cumprir obrigações aplicáveis e resguardar direitos. O uso de dados técnicos para segurança e prevenção de abuso depende da configuração dos provedores. A definição final das bases legais e do prazo de retenção de cada registro permanece pendente de validação; não foi identificado um prazo automático de exclusão de pedidos.</p>
+    <p>O acesso a downloads depende da sessão autorizada, do status do pagamento e de uma autorização temporária assinada pelo Worker. Os arquivos digitais comerciais ficam em armazenamento privado. Essas medidas descrevem o código atual e não representam garantia de ausência de incidentes.</p>
+
+    <h2>Direitos da pessoa titular</h2>
+    <p>É possível solicitar confirmação de tratamento, acesso, correção, informação sobre compartilhamento, anonimização, bloqueio ou eliminação quando cabíveis, além dos demais direitos previstos na legislação. A análise considera obrigações de conservação e outras hipóteses legais. Para exercer direitos ou fazer uma pergunta, use o <a href="/contato/">canal oficial de contato</a>.</p>
+
+    <CommercialIdentity />
   </article>
 </BaseLayout>

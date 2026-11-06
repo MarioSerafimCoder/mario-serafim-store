@@ -26,7 +26,7 @@ function jwt(override = {}) {
 function database(t) {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
-  for (const file of ['0001_commerce.sql','0002_admin.sql','0003_admin_insights.sql','0004_coupons.sql','0005_cart_checkout.sql']) db.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
+  for (const file of ['0001_commerce.sql','0002_admin.sql','0003_admin_insights.sql','0004_coupons.sql','0005_cart_checkout.sql','0006_commercial_identity.sql']) db.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
   function statement(sql, args = []) {
     const stmt = db.prepare(sql);
     const values = args.map((value) => value instanceof ArrayBuffer ? new Uint8Array(value) : value);
@@ -118,8 +118,13 @@ test('admin verifica identidade, protege mutações e mantém catálogo e pedido
   assert.equal((await publicImage(binding,src.slice(7))).status,404);
   await status(api+'/ART-1',{...product,slug:'arte-nova',status:'published',revision:5,images:[{...product.images[0],src}]});
   assert.equal((await publicImage(binding,src.slice(7))).status,200);
-  await status('/admin/api/configuracoes',{announcement:'Aviso da loja',support:'https://example.com/',period:7});
+  await status('/admin/api/configuracoes',{announcement:'Aviso da loja',support:'https://example.com/',period:7,
+    legal_name:'Mário Serafim',legal_id:'CPF validado',legal_address:'Endereço validado',legal_email:'contato@example.com',legal_phone:''});
   assert.equal((await getSettings(binding)).announcement,'Aviso da loja');
+  assert.equal((await getSettings(binding)).legal_name,'Mário Serafim');
+  assert.equal((await getSettings(binding)).legal_email,'contato@example.com');
+  await status('/admin/api/configuracoes',{announcement:'Aviso',support:'',period:7,
+    legal_name:'Mário',legal_id:'',legal_address:'',legal_email:'e-mail inválido',legal_phone:''},400);
 
   const id = randomUUID();
   raw.prepare(`INSERT INTO orders(id,recovery_hash,sku,title,price_cents,currency,object_key,filename,mode,seller,created_at)

@@ -24,7 +24,10 @@ export interface ProductRow {
 }
 export type CatalogProduct = ReturnType<typeof toProduct>;
 export type StoreDB = NonNullable<Env['DB']>;
-export interface Settings { announcement: string; support_url: string; period: number }
+export interface Settings {
+  announcement: string; support_url: string; period: number;
+  legal_name: string; legal_id: string; legal_address: string; legal_email: string; legal_phone: string;
+}
 
 export function toProduct(row: ProductRow) {
   const details = JSON.parse(row.details) as Details;
@@ -53,5 +56,5 @@ export async function catalogOffer(db: StoreDB, sku: string) {
 }
 
 export function getSettings(db: StoreDB) {
-  return db.prepare('SELECT announcement, support_url, period FROM store_settings WHERE id=1').first<Settings>();
+  return db.prepare('SELECT announcement, support_url, period, legal_name, legal_id, legal_address, legal_email, legal_phone FROM store_settings WHERE id=1').first<Settings>();
 }

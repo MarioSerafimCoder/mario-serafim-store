@@ -218,9 +218,10 @@ const { sku, name, slug, priceCents, dynamic } = Astro.props;
   .cart-title-row h3 { font-weight: 650; }
   .cart-title-row span { color: var(--muted); font-size: .8rem; }
   .cart-panel ul { display: grid; gap: .5rem; }
-  .cart-panel li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .6rem; padding-block: .35rem; border-bottom: 1px solid var(--line); font-size: .82rem; }
-  .cart-panel li a { overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: .15em; }
-  .cart-panel li button { font-size: .76rem; }
+  .cart-panel li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name price" ". remove"; align-items: start; gap: .25rem .75rem; padding-block: .55rem; border-bottom: 1px solid var(--line); font-size: .875rem; }
+  .cart-panel li a { grid-area: name; min-width: 0; overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: .15em; }
+  .cart-panel li > span { grid-area: price; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .cart-panel li button { grid-area: remove; justify-self: end; min-height: 40px; padding-inline: .4rem; font-size: .78rem; }
   .cart-total { justify-self: end; font-weight: 700; font-variant-numeric: tabular-nums; }
   .cart-warning { color: var(--muted); font-size: .82rem; }
   [role="status"]:empty { display: none; }

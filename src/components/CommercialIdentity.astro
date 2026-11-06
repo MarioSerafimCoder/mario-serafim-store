@@ -1,0 +1,25 @@
+---
+import { site } from '../config/site';
+import { getSettings } from '../../worker/catalog';
+import type { Settings } from '../../worker/catalog';
+
+const settings = Astro.locals.storeDB ? await getSettings(Astro.locals.storeDB) as Settings | null : null;
+const complete = Boolean(settings?.legal_name && settings.legal_id && settings.legal_address && settings.legal_email);
+const contact = settings?.support_url || site.officialContact;
+---
+
+<section class="identity-card" aria-labelledby="commercial-identity-heading">
+  <h2 id="commercial-identity-heading">Identificação e contato</h2>
+  {complete ? (
+    <address>
+      <strong>{settings!.legal_name}</strong><br />
+      {settings!.legal_id}<br />
+      {settings!.legal_address}<br />
+      <a href={`mailto:${settings!.legal_email}`}>{settings!.legal_email}</a>
+      {settings!.legal_phone && <><br />{settings!.legal_phone}</>}
+    </address>
+  ) : (
+    <p>Dados cadastrais, endereço e e-mail comerciais aguardam preenchimento e validação do responsável antes da abertura comercial.</p>
+  )}
+  <p><a class="text-link tap" href={contact} target="_blank" rel="noreferrer">Acessar o canal oficial de contato <span aria-hidden="true">↗</span></a></p>
+</section>

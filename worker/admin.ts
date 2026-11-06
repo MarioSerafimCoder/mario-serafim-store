@@ -135,8 +135,16 @@ async function write(request: Request, env: Env, db: StoreDB, actor: string, pat
   if (path === '/admin/api/configuracoes') {
     if (typeof data.announcement !== 'string' || data.announcement.length > 180 || typeof data.support !== 'string' ||
         data.support.length > 400 || typeof data.period !== 'number' || ![7,30,90].includes(data.period)) throw new AdminError('Configuração inválida.');
-    await db.batch([db.prepare('UPDATE store_settings SET announcement=?,support_url=?,period=? WHERE id=1')
-      .bind(data.announcement.trim(),data.support.trim() ? httpsUrl(data.support,'Atendimento') : '',data.period),audit(db,actor,'loja.configurada','loja')]);
+    const identity = ['legal_name','legal_id','legal_address','legal_email','legal_phone'] as const;
+    if (identity.some((key) => typeof data[key] !== 'string' || data[key].length > ({legal_name:160,legal_id:32,legal_address:300,legal_email:254,legal_phone:40}[key]))) {
+      throw new AdminError('Identificação comercial inválida.');
+    }
+    const legalEmail = (data.legal_email as string).trim();
+    if (legalEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(legalEmail)) throw new AdminError('Informe um e-mail de contato válido.');
+    await db.batch([db.prepare('UPDATE store_settings SET announcement=?,support_url=?,period=?,legal_name=?,legal_id=?,legal_address=?,legal_email=?,legal_phone=? WHERE id=1')
+      .bind(data.announcement.trim(),data.support.trim() ? httpsUrl(data.support,'Atendimento') : '',data.period,
+        (data.legal_name as string).trim(),(data.legal_id as string).trim(),(data.legal_address as string).trim(),legalEmail,(data.legal_phone as string).trim()),
+      audit(db,actor,'loja.configurada','loja')]);
     return result({ saved: true });
   }
   if (path === '/admin/api/arquivos/permissao') {

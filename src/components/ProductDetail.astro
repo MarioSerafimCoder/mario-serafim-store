@@ -54,9 +54,14 @@ const canOfferCheckout = !preview && status === 'published' && priceCents > 0 &&
           <p class="purchase-state"><span class="signal" aria-hidden="true"></span>{status === 'coming_soon' ? 'Este produto ainda não está disponível.' : 'Compra indisponível nesta etapa.'}</p>
         )}
         {canOfferCheckout && <div class="purchase-notes">
-          <p><span aria-hidden="true">↗</span> Pagamento processado pelo Mercado Pago quando o checkout estiver disponível.</p>
-          <p><span aria-hidden="true">↓</span> O acesso digital é liberado após a confirmação do pagamento.</p>
-          <a href="/licencas/" class="text-link tap">Consultar condições de licença</a>
+          <p><span aria-hidden="true">↗</span> Ao comprar, você segue para o Mercado Pago. O pedido aparece em Minha compra após a confirmação.</p>
+          <p><span aria-hidden="true">↓</span> Arquivos disponíveis para download ficam em Minha compra.</p>
+          <nav aria-label="Informações da compra" class="purchase-help-links">
+            <a href="/licencas/" class="text-link tap">Licença de uso</a>
+            <a href="/entrega-digital/" class="text-link tap">Entrega digital</a>
+            <a href="/reembolsos/" class="text-link tap">Cancelamentos e reembolsos</a>
+            <a href="/contato/" class="text-link tap">Contato e suporte</a>
+          </nav>
         </div>}
       </aside>
 

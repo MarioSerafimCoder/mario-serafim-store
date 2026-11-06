@@ -77,18 +77,25 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
 
   build();
   const pages = ['index.html', 'produtos/index.html', 'sobre/index.html', 'licencas/index.html',
-    'termos/index.html', 'privacidade/index.html', '404.html'];
+    'termos/index.html', 'privacidade/index.html', 'contato/index.html', 'entrega-digital/index.html',
+    'reembolsos/index.html', '404.html'];
   for (const page of pages) {
     const html = await read(page);
     assert.match(html, /<html lang="pt-BR">/);
     assert.match(html, /<script id="store-theme">/);
     const withoutTheme = html.replace(/<script id="store-theme">[\s\S]*?<\/script>/, '');
-    assert.doesNotMatch(withoutTheme, /<script\b|<form\b|data-add-to-cart|isle.thorne|newsletter|checkout/i);
+    assert.doesNotMatch(withoutTheme, /<script\b|<form\b|data-add-to-cart|isle.thorne|newsletter/i);
   }
   assert.match(await read('produtos/index.html'), /catálogo ainda está vazio/);
-  for (const page of ['termos/index.html', 'privacidade/index.html', '404.html']) {
+  for (const page of ['termos/index.html', 'privacidade/index.html', 'licencas/index.html', 'reembolsos/index.html', '404.html']) {
     assert.match(await read(page), /name="robots" content="noindex"/);
   }
+  const contact = await read('contato/index.html');
+  assert.match(contact, /https:\/\/marioserafim\.com\.br\/contato\//);
+  assert.match(await read('entrega-digital/index.html'), /Como recebo meu produto\?/);
+  assert.match(await read('entrega-digital/index.html'), /Posso usar o produto em projetos comerciais/);
+  assert.match(await read('reembolsos/index.html'), /sete dias/);
+  assert.match(await read('reembolsos/index.html'), /não condiciona esse direito ao fato de o arquivo ter sido baixado ou aberto/);
   assert.match(await read('avisos-legais.txt'), /Copyright \(c\) 2026 Codrops[\s\S]+SIL OPEN FONT LICENSE/);
 
   await writeProduct('private'); // Sem status: precisa ser draft por padrão.
@@ -122,6 +129,10 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
   assert.match(alpha, /Produtos relacionados[\s\S]+fixture-beta/);
   assert.doesNotMatch(beta, /Perguntas frequentes/);
   assert.match(alpha, /Compra indisponível nesta etapa/);
+  assert.match(alpha, /href="\/licencas\/"[^>]*>Licença de uso/);
+  assert.match(alpha, /href="\/entrega-digital\/"[^>]*>Entrega digital/);
+  assert.match(alpha, /href="\/reembolsos\/"[^>]*>Cancelamentos e reembolsos/);
+  assert.match(alpha, /href="\/contato\/"[^>]*>Contato e suporte/);
   assert.match(beta, /Este produto ainda não está disponível/);
   assert.match(sitemap, /fixture-alpha/);
   assert.match(sitemap, /fixture-beta/);

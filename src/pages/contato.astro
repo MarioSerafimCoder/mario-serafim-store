@@ -1,0 +1,31 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { site } from '../config/site';
+import { getSettings } from '../../worker/catalog';
+import type { Settings } from '../../worker/catalog';
+
+const settings = Astro.locals.storeDB ? await getSettings(Astro.locals.storeDB) as Settings | null : null;
+const contact = settings?.support_url || site.officialContact;
+---
+
+<BaseLayout title="Contato e suporte">
+  <article class="article page-intro">
+    <p class="eyebrow">Atendimento da loja</p>
+    <h1 class="display">Contato e suporte</h1>
+    <p class="lede">Use o canal oficial para dúvidas sobre produtos, pagamentos, arquivos, licenças e pedidos.</p>
+
+    <h2>Em que podemos ajudar</h2>
+    <ul>
+      <li>Dúvidas antes da compra e sobre a compatibilidade indicada.</li>
+      <li>Pedido ou pagamento que não aparece com o status esperado.</li>
+      <li>Recuperação de acesso ou falha no download.</li>
+      <li>Arquivo defeituoso ou diferente da descrição.</li>
+      <li>Interpretação da licença de um produto.</li>
+      <li>Cancelamento ou reembolso.</li>
+    </ul>
+
+    <p><a class="action" href={contact} target="_blank" rel="noreferrer">Abrir canal oficial de contato <span aria-hidden="true">↗</span></a></p>
+    <p>O link abre o canal público de contato do portfólio oficial. A loja não mantém um formulário próprio de atendimento nem publica prazo de resposta ainda não confirmado.</p>
+    <p>Ao pedir ajuda sobre uma compra, informe apenas os dados necessários para localizar o pedido. Não envie senha, dados completos de cartão ou código de recuperação em canais públicos.</p>
+  </article>
+</BaseLayout>

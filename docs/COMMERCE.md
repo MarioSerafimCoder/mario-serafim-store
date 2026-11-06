@@ -10,12 +10,16 @@ Nas páginas de produto, **Comprar agora** inicia um pedido individual e redirec
 
 - Execute `npm ci`, `npm run check`, `npm run build` e `npm test`.
 - Use `wrangler d1 migrations apply DB --env homologacao --remote` para aplicar migrations.
-- A migration `0005_cart_checkout.sql` adiciona o registro do pagamento agregado e vincula as linhas do carrinho aos pedidos. Aplique as migrations pendentes antes de publicar esta versão.
+- A migration `0005_cart_checkout.sql` adiciona o registro do pagamento agregado e vincula as linhas do carrinho aos pedidos. A migration `0006_commercial_identity.sql` adiciona campos opcionais de identificação comercial em `store_settings`; preencha-os no painel apenas após validar os dados. Aplique as migrations pendentes antes de publicar esta versão.
 - Publique com `npm run deploy:homologacao`. O ambiente começa com `CHECKOUT_ENABLED=false`.
 - No painel Mercado Pago, configure o evento **Order (Mercado Pago)** no ambiente **Teste** e a URL `https://mario-serafim-store-homologacao.marioserafim-da.workers.dev/compras/api/webhook`.
 - Defina `MP_SELLER_ID` com o ID do vendedor do ambiente. Instale `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` e `STORE_SESSION_SECRET` por `wrangler secret put <NOME> --env homologacao` ou pelo painel da Cloudflare. Use valores distintos em produção. A chave de sessão deve ter pelo menos 32 caracteres aleatórios. Guarde o token no cofre do Worker.
 - Use a credencial de vendedor de teste indicada para **Checkout Pro com Orders** e um comprador de teste separado. Confirme o ID do vendedor, o prefixo da order de teste, o retorno e o webhook com uma compra simulada oficial antes de habilitar produção.
 - Quando o R2 estiver disponível, use um bucket privado exclusivo para homologação e vincule-o como `FILES`. Cadastre um produto no painel desse ambiente, envie seu arquivo e permita novas entregas. Só então habilite `CHECKOUT_ENABLED` em homologação.
+
+## Conteúdo institucional
+
+`/contato/` encaminha ao canal público do portfólio, a menos que uma URL de atendimento confirmada seja configurada no painel. `/entrega-digital/` descreve o fluxo observado e reúne as perguntas frequentes. Termos, privacidade, licenças e reembolsos estão marcados como conteúdo preliminar sem indexação enquanto dados e condições comerciais aguardam validação. Não preencha CPF/CNPJ, endereço ou e-mail por suposição; os campos são opcionais e exibidos publicamente quando completos.
 
 ### Cupons
 

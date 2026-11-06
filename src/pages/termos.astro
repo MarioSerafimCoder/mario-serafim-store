@@ -1,11 +1,38 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import CommercialIdentity from '../components/CommercialIdentity.astro';
 ---
 
-<BaseLayout title="Termos" noindex>
+<BaseLayout title="Termos de uso" noindex>
   <article class="article page-intro">
+    <p class="eyebrow">Versão preliminar para homologação</p>
     <h1 class="display">Termos de uso</h1>
-    <p>Documento em preparação.</p>
-    <!-- Seções para revisão: responsável e contato, uso da vitrine, compras e entrega, suporte e cancelamento. -->
+    <p class="lede">Estas condições descrevem o funcionamento atual da loja. Os dados cadastrais do fornecedor e as condições comerciais finais precisam ser preenchidos e validados antes da abertura comercial.</p>
+
+    <h2>Fornecedor e atendimento</h2>
+    <p>A loja apresenta produtos digitais de autoria de Mário Serafim. A identificação cadastral completa e o endereço comercial ainda estão pendentes de validação e serão exibidos nesta página e no rodapé quando forem cadastrados.</p>
+
+    <h2>Produtos e informações da oferta</h2>
+    <p>Consulte a página de cada produto para conferir descrição, arquivos incluídos, formatos, requisitos, versão e licença indicada. Demonstrações e arquivos de teste são identificados como tais. Se uma informação da oferta estiver incompleta ou divergente, peça esclarecimento antes de contratar.</p>
+
+    <h2>Pedido e pagamento</h2>
+    <p>Quando o checkout estiver habilitado para o produto, “Comprar agora” inicia um pedido individual e “Adicionar ao carrinho” reúne itens neste navegador para uma única cobrança. Antes de confirmar, confira produtos e valores. O pagamento é realizado no ambiente do Mercado Pago. A loja recebe a confirmação e atualiza o status do pedido; dados de cartão são informados ao provedor de pagamento, não à loja.</p>
+
+    <h2>Confirmação e entrega digital</h2>
+    <p>O status é consultável em <a href="/compras/">Minha compra</a>. O download fica disponível depois da confirmação do pagamento e somente enquanto o pedido autorizar o acesso e o arquivo estiver disponível. Veja o passo a passo em <a href="/entrega-digital/">Entrega digital e dúvidas</a>. O checkout de produção pode estar desativado para determinados produtos ou períodos.</p>
+
+    <h2>Licença de uso</h2>
+    <p>As condições podem variar por produto. A página individual mostra o tipo e o resumo cadastrados; não se deve presumir autorização para uso comercial, modificação, redistribuição ou revenda quando isso não estiver expressamente descrito. Consulte <a href="/licencas/">Licenças</a> e peça esclarecimento em caso de dúvida.</p>
+
+    <h2>Responsabilidades e suporte</h2>
+    <p>Antes de comprar, confira os formatos e requisitos informados e use o arquivo conforme a licença daquele produto. Para dúvidas, problemas de acesso ou divergência com a oferta, use o <a href="/contato/">canal de contato e suporte</a>. Não envie dados completos de cartão ou senhas pelo atendimento.</p>
+
+    <h2>Cancelamentos e reembolsos</h2>
+    <p>O consumidor pode exercer o direito de arrependimento aplicável às contratações a distância. Baixar ou abrir o arquivo não é apresentado aqui como renúncia automática desse direito. Consulte o procedimento em <a href="/reembolsos/">Cancelamentos e reembolsos</a>. Nenhum estorno automático é realizado pela loja.</p>
+
+    <h2>Atualizações</h2>
+    <p>As informações específicas do produto e a versão exibida na página da oferta orientam o que está incluído. Alterações futuras destas condições serão publicadas nesta página. A versão final dos termos depende de validação comercial e jurídica.</p>
+
+    <CommercialIdentity />
   </article>
 </BaseLayout>

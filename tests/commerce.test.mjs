@@ -15,7 +15,11 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   db.exec(readFileSync(new URL('../migrations/0001_commerce.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0002_admin.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0003_admin_insights.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0004_coupons.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../migrations/0005_cart_checkout.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0006_commercial_identity.sql', import.meta.url), 'utf8'));
   db.prepare('INSERT INTO fulfillment VALUES (?, ?, ?, ?, 1)').run('REAL-1', '1', 'versioned/file.zip', 'produto.zip');
   const env = {
     ASSETS: { fetch: async () => Response.json([product, productTwo, { ...product, sku: 'DEMO-1' }]) },
@@ -170,7 +174,11 @@ test('carrinho valida todos os itens, cria uma única order e entrega cada arqui
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   db.exec(readFileSync(new URL('../migrations/0001_commerce.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0002_admin.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0003_admin_insights.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0004_coupons.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../migrations/0005_cart_checkout.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0006_commercial_identity.sql', import.meta.url), 'utf8'));
   db.prepare('INSERT INTO fulfillment VALUES (?, ?, ?, ?, 1)').run(product.sku, product.version, 'real-1.zip', 'real-1.zip');
   db.prepare('INSERT INTO fulfillment VALUES (?, ?, ?, ?, 1)').run(productTwo.sku, productTwo.version, 'real-2.zip', 'real-2.zip');
   const env = {

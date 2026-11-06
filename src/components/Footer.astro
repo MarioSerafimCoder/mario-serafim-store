@@ -1,23 +1,45 @@
 ---
 import { site } from '../config/site';
+import { getSettings, type Settings } from '../../worker/catalog';
 const year = new Date().getFullYear();
+const settings = Astro.locals.storeDB ? await getSettings(Astro.locals.storeDB) as Settings | null : null;
+const identityComplete = Boolean(settings?.legal_name && settings.legal_id && settings.legal_address && settings.legal_email);
+const officialContact = site.officialContact;
 ---
 
 <footer class="site-footer">
   <div class="shell footer-grid">
-    <div>
+    <div class="footer-brand">
       <a href="/" class="wordmark tap">
         <img src="/marca/monograma.png" width="115" height="57" alt="" loading="lazy" />
         <span class="wordmark-label"><span>Mário Serafim</span><small>Store</small></span>
       </a>
       <p>© {year} Mário Serafim</p>
     </div>
-    <nav aria-label="Navegação do rodapé">
-      {site.nav.map((item) => <a href={item.href} class="tap">{item.label}</a>)}
+    <nav aria-label="Loja">
+      <h2>Loja</h2>
+      {site.footer.store.map((item) => <a href={item.href} class="tap" target={item.external ? '_blank' : undefined} rel={item.external ? 'noreferrer' : undefined}>{item.label}{item.external && <span aria-hidden="true"> ↗</span>}</a>)}
     </nav>
-    <nav aria-label="Informações institucionais">
-      {site.legal.map((item) => <a href={item.href} class="tap">{item.label}</a>)}
-      <a href="https://marioserafim.com.br" class="tap">Portfólio <span aria-hidden="true">↗</span></a>
+    <nav aria-label="Ajuda">
+      <h2>Ajuda</h2>
+      {site.footer.help.map((item) => <a href={item.href} class="tap">{item.label}</a>)}
     </nav>
+    <nav aria-label="Informações legais">
+      <h2>Informações legais</h2>
+      {site.footer.legal.map((item) => <a href={item.href} class="tap">{item.label}</a>)}
+    </nav>
+    <section class="footer-identity" aria-label="Identificação comercial">
+      <h2>Identificação</h2>
+      <p><strong>{settings?.legal_name || 'Mário Serafim'}</strong></p>
+      {identityComplete ? (
+        <>
+          <p>{settings!.legal_id}</p><p>{settings!.legal_address}</p><p><a href={`mailto:${settings!.legal_email}`}>{settings!.legal_email}</a></p>
+          {settings!.legal_phone && <p>{settings!.legal_phone}</p>}
+        </>
+      ) : (
+        <p class="identity-pending">Dados cadastrais e endereço aguardam preenchimento e validação antes da abertura comercial.</p>
+      )}
+      <a class="tap" href={settings?.support_url || officialContact} target="_blank" rel="noreferrer">Canal oficial de contato <span aria-hidden="true">↗</span></a>
+    </section>
   </div>
 </footer>

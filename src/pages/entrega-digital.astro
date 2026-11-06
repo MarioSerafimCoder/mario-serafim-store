@@ -1,0 +1,30 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Entrega digital e dúvidas">
+  <article class="article page-intro">
+    <p class="eyebrow">Como funciona a compra</p>
+    <h1 class="display">Entrega digital</h1>
+    <p class="lede">Confira o conteúdo, os formatos e a licença na página do produto. O download só é liberado depois da confirmação do pagamento e da autorização do pedido.</p>
+
+    <ol class="delivery-steps">
+      <li><strong>Escolha o produto.</strong> Veja prévias, conteúdo incluído, formato, requisitos e licença.</li>
+      <li><strong>Confira o pedido.</strong> Quando o checkout estiver habilitado, “Comprar agora” inicia um pedido individual; “Adicionar ao carrinho” permite reunir produtos neste navegador para uma única cobrança.</li>
+      <li><strong>Pague no Mercado Pago.</strong> O botão segue para o ambiente do provedor. A loja não recebe o número do cartão.</li>
+      <li><strong>Aguarde a confirmação.</strong> O status depende da confirmação do Mercado Pago e pode permanecer pendente ou em análise.</li>
+      <li><strong>Acesse Minha compra.</strong> Depois da aprovação, os downloads autorizados aparecem em <a href="/compras/">Minha compra</a>.</li>
+      <li><strong>Baixe o arquivo.</strong> Cada arquivo autorizado é servido pela loja e pode ser baixado novamente enquanto o pedido mantiver o acesso.</li>
+    </ol>
+
+    <h2>Perguntas frequentes</h2>
+    <details class="faq-item"><summary>Como recebo meu produto?</summary><p>Após a confirmação do pagamento, consulte <a href="/compras/">Minha compra</a>. O botão de download aparece para os itens autorizados.</p></details>
+    <details class="faq-item"><summary>Preciso criar uma conta?</summary><p>O fluxo atual não oferece cadastro de conta. O acesso ao pedido usa a sessão do navegador e os mecanismos de recuperação disponíveis na página Minha compra.</p></details>
+    <details class="faq-item"><summary>Posso acessar novamente os arquivos?</summary><p>Use a mesma sessão de compra em <a href="/compras/">Minha compra</a>. A recuperação em outro dispositivo pode exigir o código de acesso. O número do pedido sozinho não libera downloads. Se perder o acesso, peça orientação pelo <a href="/contato/">canal de suporte</a>.</p></details>
+    <details class="faq-item"><summary>Quais softwares preciso utilizar?</summary><p>Confira os formatos e requisitos na página de cada produto. A compatibilidade pode variar de um item para outro.</p></details>
+    <details class="faq-item"><summary>Posso usar o produto em projetos comerciais?</summary><p>Isso depende da licença específica do item. Consulte <a href="/licencas/">Licenças</a> e a licença apresentada na página do produto; não presuma permissões que não estejam descritas.</p></details>
+    <details class="faq-item"><summary>Como solicito suporte ou cancelamento?</summary><p>Acesse <a href="/contato/">Contato e suporte</a> ou <a href="/reembolsos/">Cancelamentos e reembolsos</a>. O direito legal de arrependimento não é condicionado ao download do arquivo.</p></details>
+
+    <p>Se o checkout de um produto estiver desativado, a página informa essa condição e não é possível iniciar um pagamento para ele.</p>
+  </article>
+</BaseLayout>

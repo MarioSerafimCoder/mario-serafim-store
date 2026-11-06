@@ -57,8 +57,8 @@ const categories = [...new Set(products.map(({ data }) => data.category))].sort(
 
   <section class="store-section store-creator" aria-labelledby="author">
     <div><p class="eyebrow">Quem cria os recursos</p><h2 id="author" class="section-title">Mário Serafim</h2></div>
-    <p>Diretor de arte em Fortaleza, com atuação em identidade visual, branding e experiências digitais.</p>
+    <p>Mário Serafim é diretor de arte em Fortaleza. A loja reúne recursos digitais ligados à sua prática em identidade visual, branding e experiências digitais.</p>
     <a class="text-link tap" href="/sobre/">Sobre o criador <span aria-hidden="true">↗</span></a>
-    {settings?.support_url && <a class="text-link tap" href={settings.support_url}>Atendimento <span aria-hidden="true">↗</span></a>}
+    <a class="text-link tap" href="/contato/">Contato e suporte <span aria-hidden="true">↗</span></a>
   </section>
 </BaseLayout>
