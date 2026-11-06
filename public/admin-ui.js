@@ -1,4 +1,22 @@
 const feedback = document.querySelector('#feedback');
+const nav = document.querySelector('.admin-navigation');
+const productsNav = document.querySelector('.nav-products');
+const compact = matchMedia('(max-width:47rem)');
+function setNavigation() {
+  nav.open = !compact.matches;
+  try {
+    if (compact.matches) nav.open = localStorage.getItem('admin-mobile-menu') === 'open';
+    if (!productsNav.hasAttribute('data-active')) productsNav.open = localStorage.getItem('admin-products-menu') === 'open';
+  } catch {}
+}
+setNavigation();
+compact.addEventListener('change', setNavigation);
+nav.addEventListener('toggle', () => {
+  if (compact.matches) try { localStorage.setItem('admin-mobile-menu', nav.open ? 'open' : 'closed'); } catch {}
+});
+productsNav.addEventListener('toggle', () => {
+  try { localStorage.setItem('admin-products-menu', productsNav.open ? 'open' : 'closed'); } catch {}
+});
 function notice(message, error = false) {
   feedback.hidden = false;
   feedback.setAttribute('role', error ? 'alert' : 'status');
@@ -6,7 +24,10 @@ function notice(message, error = false) {
   if (error) feedback.scrollIntoView({ block: 'nearest' });
 }
 async function send(url, data) {
-  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data), redirect: 'error' });
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with':'XMLHttpRequest' }, body: JSON.stringify(data), redirect: 'manual' });
+  if (res.type === 'opaqueredirect' || res.status === 401 || !res.headers.get('content-type')?.includes('application/json')) {
+    throw new Error('Sessão encerrada ou serviço indisponível. Entre novamente no painel em outra aba para preservar o formulário.');
+  }
   const value = await res.json();
   if (!res.ok) throw new Error(value.error);
   return value;
@@ -37,6 +58,29 @@ async function perform(button, operation) {
   try { await operation(); }
   catch (error) { notice(error.message || 'Não foi possível concluir a operação.', true); }
   finally { button.disabled = false; }
+}
+for (const form of document.querySelectorAll('[data-coupon]')) {
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    perform(event.submitter, async () => {
+      const data = Object.fromEntries(new FormData(form));
+      await send('/admin/api/cupons',{...data,revision:Number(data.revision),maxUses:Number(data.maxUses),active:form.elements.active.checked});
+      const url = new URL(location.href);
+      url.searchParams.set('salvo','1');
+      location.assign(url);
+    });
+  });
+}
+if (location.pathname==='/admin/descontos' && new URLSearchParams(location.search).has('salvo')) notice('Cupom salvo.');
+for (const form of document.querySelectorAll('[data-category]')) {
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    perform(event.submitter, async () => {
+      if (!confirm('Alterar a categoria de todos os produtos com este nome?')) return;
+      await send('/admin/api/categorias',Object.fromEntries(new FormData(form)));
+      location.reload();
+    });
+  });
 }
 for (const button of document.querySelectorAll('[data-action]')) {
   button.addEventListener('click', () => perform(button, async () => {

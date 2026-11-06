@@ -6,11 +6,20 @@ Em **Produtos → Novo produto**, informe nome, SKU, slug e preço. Salve o rasc
 
 A home, a listagem, as páginas de produto e o sitemap leem o D1. A revisão do catálogo muda junto com o registro e invalida as páginas em cache em todos os pontos de presença. As prévias JPEG, PNG e WebP enviadas pelo editor ficam no D1 e recebem URL pública enquanto associadas a produtos visíveis. O catálogo Markdown real estava vazio na migração. As três entradas de demonstração permanecem apenas como fixtures no repositório.
 
+## Admin 2.0
+
+- A navegação agrupa gerenciamento, canais e preferências. Em **Produtos → Categorias**, a categoria continua sendo um atributo do produto. Renomear atualiza o catálogo sem reclassificar pedidos históricos.
+- **Pedidos** permite filtrar por período, estado e busca. Os CSVs de pedidos e relatórios exigem sessão administrativa, omitem e-mail e chaves privadas e neutralizam fórmulas. A exportação de pedidos aceita até 5.000 linhas por arquivo.
+- **Relatórios** usa o valor dos pedidos atualmente aprovados, por data de criação no horário de Brasília. Estornos e cancelamentos aparecem como eventos. A receita líquida requer valores efetivamente estornados e taxas, ainda indisponíveis. As categorias de pedidos antigos aparecem como não registradas.
+- **Clientes** associa pedidos apenas ao e-mail retornado pelo Mercado Pago ao verificar a aprovação. Pedidos sem e-mail continuam consultáveis em Pedidos. O módulo não usa dados de marketing nem solicita e-mail ao comprador.
+- **Descontos** está configurado para homologação. Ao criar o pedido, o Worker confere o SKU, prazo, cota, desconto e total na mesma gravação que reserva o uso. Tentativas com o mesmo código de recuperação reutilizam o pedido. Cada reserva conta no limite mesmo em compras abandonadas. O subtotal fica representado pela soma do total cobrado e do desconto gravado.
+- **Apps e integrações** distingue a configuração local do estado verificado pelo provedor. A conexão Meta não está configurada. A área de canais permite consultar a loja online.
+
 ## Operação técnica
 
 - Use `npm run check`, `npm run build` e `npm test`. O build estático preserva a validação das coleções Markdown para prévias locais e fixtures. `npm run build:worker` gera o Worker Astro para o catálogo operacional.
 - Use `wrangler d1 migrations apply DB --config wrangler.jsonc --env homologacao --remote` para o D1 de teste e o mesmo comando sem `--env homologacao` para o banco de produção. Os bancos são distintos. As tabelas comerciais `orders`, `order_events` e `fulfillment` continuam sendo usadas.
-- A migration `0002_admin.sql` acrescenta `products`, `product_slugs`, `product_images`, `catalog_revision`, `store_settings`, `admin_events` e `admin_rate`. Pedidos guardam o SKU, o título, o preço e o arquivo do momento da compra. Arquivamento e alterações de preço não modificam pedidos anteriores.
+- As migrations `0003_admin_insights.sql` e `0004_coupons.sql` acrescentam campos aos pedidos, índices e a tabela de cupons. Aplique-as antes de publicar o Admin 2.0. A migration `0002_admin.sql` acrescenta `products`, `product_slugs`, `product_images`, `catalog_revision`, `store_settings`, `admin_events` e `admin_rate`. Pedidos guardam o SKU, o título, o preço e o arquivo do momento da compra. Arquivamento e alterações de preço não modificam pedidos anteriores.
 - Use `npm run deploy:homologacao` e, após validar, `npm run deploy:producao`. O script verifica o Worker, o D1 e o domínio antes do envio. Guarde o ID da última versão saudável para rollback. O Worker que atende o domínio mantém o nome histórico.
 - As audiências do Access são distintas. Configure `ADMIN_EMAIL` como secret em cada Worker. Não coloque o e-mail autorizado em arquivos públicos. O Access mantém uma política de igualdade de e-mail para o proprietário.
 - O painel apenas consulta a situação do checkout. A habilitação depende do fluxo em [COMMERCE.md](COMMERCE.md). Para entrega digital, o R2 deve estar vinculado a `FILES` sem acesso público. Faça upload por SKU e versão, confira a disponibilidade e permita novas entregas na área **Arquivos digitais**. Cada versão tem uma chave imutável. Arquivar um produto ou bloquear novas vendas de uma versão preserva os direitos dos pedidos anteriores.

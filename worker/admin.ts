@@ -1,6 +1,10 @@
+import { integrationPage, operations, salesChannels } from './admin-operations.ts';
+import { couponsPage, saveCoupon } from './admin-coupons.ts';
+import { activity, customerHistory, customers, insights, reports, salesChart } from './admin-insights.ts';
+import { csv, orderColumns, orderFilters, orderRows, orderStatuses, productCategories, type OrderSummary } from './admin-orders.ts';
 import { accessConfigured, verifyAccess } from './access.ts';
 import { AdminError, audit, findProduct, httpsUrl, imageMime, productAction, publicImage, saveProduct } from './admin-data.ts';
-import { dashboard, editor, filePage, html, orderDetail, orderTable, page, productsTable, settingsPage, type OrderSummary } from './admin-ui.ts';
+import { dashboard, editor, filePage, html, orderDetail, orderTable, page, productsTable, settingsPage, paymentLabel } from './admin-ui.ts';
 import { getSettings, skuPattern, statuses, versionPattern, type ProductRow, type Settings, type StoreDB } from './catalog.ts';
 import { richText } from './rich-text.ts';
 import type { Env } from './types.ts';
@@ -12,8 +16,6 @@ const privacy = {
 };
 
 const orderId = /^[a-f0-9-]{36}$/;
-const orderColumns = `o.id,o.sku,o.title,o.price_cents,o.remote_id,o.payment_id,o.status,o.created_at,
-  EXISTS(SELECT 1 FROM order_events e WHERE e.order_id=o.id AND e.kind='download_started') AS delivered`;
 
 function result(data: unknown, status = 200) {
   return Response.json(data, { status, headers: privacy });
@@ -114,6 +116,22 @@ async function write(request: Request, env: Env, db: StoreDB, actor: string, pat
     if (typeof data.description !== 'string' || data.description.length > 16000) throw new AdminError('Descrição inválida.');
     return result({ html: richText(data.description) });
   }
+  if (path === '/admin/api/cupons') {
+    if (env.COUPONS_ENABLED !== 'true') throw new AdminError('Cupons indisponíveis neste ambiente.',404);
+    return result(await saveCoupon(db,actor,data));
+  }
+  if (path === '/admin/api/categorias') {
+    const { from, name } = data;
+    if (typeof from !== 'string' || !from || from.length > 80 || typeof name !== 'string' ||
+      !name.trim() || name.length > 80 || /[\p{Cc}\p{Cf}]/u.test(name)) throw new AdminError('Informe uma categoria válida.');
+    const next = name.trim();
+    if (from === next) throw new AdminError('Escolha um nome diferente.');
+    const [updated] = await db.batch([
+      db.prepare("UPDATE products SET category=?,updated_at=date('now'),revision=revision+1 WHERE category=?").bind(next,from),
+      audit(db,actor,'categoria.renomeada',from + ' → ' + next),
+    ]);
+    return result({saved:true, changed:updated.meta?.changes});
+  }
   if (path === '/admin/api/configuracoes') {
     if (typeof data.announcement !== 'string' || data.announcement.length > 180 || typeof data.support !== 'string' ||
         data.support.length > 400 || typeof data.period !== 'number' || ![7,30,90].includes(data.period)) throw new AdminError('Configuração inválida.');
@@ -148,39 +166,57 @@ async function adminPage(env: Env, db: StoreDB, url: URL, path: string) {
     const setting = await getSettings(db);
     const requested = Number(url.searchParams.get('period'));
     const period = [7,30,90].includes(requested) ? requested : setting?.period ?? 30;
-    const since = Math.floor(Date.now()/1000) - period * 86400;
-    const [stats, products, orders, sales] = await Promise.all([
-      db.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN status='approved' THEN price_cents ELSE 0 END),0) AS revenue,
-        COUNT(CASE WHEN status IN ('created','pending') THEN 1 END) AS pending,
-        COUNT(CASE WHEN status IN ('review','refunded','disputed') THEN 1 END) AS alerts FROM orders WHERE mode=? AND created_at>=?`).bind(mode,since)
-        .first<{total:number;revenue:number;pending:number;alerts:number}>(),
+    const data = await insights(db,mode,period);
+    const count = (...states:string[]) => data.status.filter(r=>states.includes(r.label)).reduce((n,r)=>n+r.qty,0);
+    const stats = {total:data.status.reduce((n,r)=>n+r.qty,0),revenue:data.status.find(r=>r.label==='approved')?.revenue ?? 0,
+      pending:count('created','pending'),alerts:count('review','refunded','disputed')};
+    const [products,orders] = await Promise.all([
       db.prepare("SELECT COUNT(CASE WHEN status='published' THEN 1 END) AS published,COUNT(CASE WHEN status='draft' THEN 1 END) AS draft FROM products").first<{published:number;draft:number}>(),
-      db.prepare('SELECT '+orderColumns+' FROM orders o WHERE mode=? AND created_at>=? ORDER BY created_at DESC LIMIT 8').bind(mode,since).all<OrderSummary>(),
-      db.prepare("SELECT MAX(title) AS title, COUNT(*) AS qty, SUM(price_cents) AS revenue FROM orders WHERE mode=? AND created_at>=? AND status='approved' GROUP BY sku ORDER BY revenue DESC LIMIT 10").bind(mode,since).all<{title:string;qty:number;revenue:number}>(),
+      db.prepare('SELECT '+orderColumns+' FROM orders o WHERE mode=? AND created_at>=? ORDER BY created_at DESC LIMIT 8').bind(mode,data.since).all<OrderSummary>(),
     ]);
-    return ['Visão geral',dashboard(stats!,products!,orders.results,sales.results,period),'/admin'];
+    const deliveryAlert = env.FILES ? '' : '<p class="helper">Armazenamento privado indisponível. Confira as integrações antes de abrir vendas.</p>';
+    return ['Início',dashboard(stats,products!,orders.results,data.products.slice(0,5).map(r=>({...r,title:r.label})),period,salesChart(data.series),deliveryAlert+activity(data.events.slice(0,5))),'/admin'];
   }
   if (path === '/admin/produtos') {
     const filter = url.searchParams.get('status') ?? '';
     const status = Object.hasOwn(statuses, filter) ? filter : '';
-    const rows = await db.prepare(`SELECT sku,slug,name,price_cents,status,revision FROM products WHERE (?='' OR status=?)
-      AND (instr(lower(name),lower(?))>0 OR instr(lower(sku),lower(?))>0 OR instr(slug,lower(?))>0)
-      ORDER BY updated_at DESC,name LIMIT 31 OFFSET ?`).bind(status,status,query,query,query,offset).all<ProductRow>();
-    return ['Produtos',productsTable(rows.results,query,status,offset),path];
+    const category = (url.searchParams.get('category') ?? '').slice(0,80);
+    const [rows, categories] = await Promise.all([
+      db.prepare(`SELECT sku,slug,name,category,updated_at,price_cents,status,revision,json_extract(details,'$.images[0].src') AS cover
+        FROM products WHERE (?='' OR status=?) AND (?='' OR category=?)
+        AND (instr(lower(name),lower(?))>0 OR instr(lower(sku),lower(?))>0 OR instr(slug,lower(?))>0)
+        ORDER BY updated_at DESC,name,sku LIMIT 31 OFFSET ?`).bind(status,status,category,category,query,query,query,offset)
+        .all<ProductRow & {cover:string|null}>(),
+      productCategories(db),
+    ]);
+    return ['Produtos',productsTable(rows.results,query,status,category,categories.results.map(c=>c.category),offset),path];
   }
-  if (path === '/admin/produtos/novo') return ['Novo produto',editor(),'/admin/produtos'];
+  const categories = async () => (await productCategories(db)).results.map(c=>c.category);
+  if (path === '/admin/produtos/categorias') {
+    const rows = await categories();
+    return ['Categorias',`<section class="panel"><h2>Categorias do catálogo</h2><p>Cadastre uma nova categoria ao preencher o campo no editor de produto. Para reunir duas categorias, use o nome de uma categoria existente.</p>
+      ${rows.length ? '<ul class="rank">'+rows.map(category=>`<li><a href="/admin/produtos?category=${encodeURIComponent(category)}">${html(category)}</a>
+        <details><summary>Renomear</summary><form method="post" data-category><input type="hidden" name="from" value="${html(category)}">
+        <label>Novo nome <input name="name" maxlength="80" required></label><button>Aplicar aos produtos</button></form></details></li>`).join('')+'</ul>'
+      : '<p class="empty">As categorias aparecem após cadastrar o primeiro produto.</p>'}</section>`,path];
+  }
+  if (path === '/admin/produtos/novo') return ['Novo produto',editor(undefined,await categories()),path];
   if (path.startsWith('/admin/produtos/')) {
     const sku = path.slice('/admin/produtos/'.length);
     const row = sku.length<=80 && skuPattern.test(sku) ? await findProduct(db,sku) : null;
-    if (row) return ['Editar produto',editor(row),'/admin/produtos'];
+    if (row) return ['Editar produto',editor(row,await categories()),'/admin/produtos'];
   }
   if (path === '/admin/pedidos') {
-    const orders = await db.prepare(`SELECT ${orderColumns} FROM orders o WHERE mode=? AND
-      (?='' OR instr(lower(title),lower(?))>0 OR instr(lower(sku),lower(?))>0 OR instr(id,?)>0 OR instr(remote_id,?)>0 OR instr(payment_id,?)>0)
-      ORDER BY created_at DESC LIMIT 31 OFFSET ?`).bind(mode,query,query,query,query,query,query,offset).all<OrderSummary>();
-    const pager = (n: number, label: string) => `<a href="?q=${encodeURIComponent(query)}&amp;offset=${n}">${label}</a>`;
-    return ['Pedidos',`<form class="filters" method="get"><label>Buscar <input type="search" name="q" maxlength="80" value="${html(query)}" placeholder="Pedido, SKU ou referência"></label><button>Buscar</button></form>
-      ${orderTable(orders.results.slice(0,30))}<nav class="pager" aria-label="Paginação">${offset?pager(Math.max(0,offset-30),'← Anteriores'):''}${orders.results.length>30?pager(offset+30,'Próximos →'):''}</nav>`,path];
+    const filters = orderFilters(url.searchParams);
+    const orders = await orderRows(db,mode,filters,31,offset);
+    const search = new URLSearchParams({q:filters.q,status:filters.status,period:String(filters.period)});
+    const pageLink = (next:number) => '?' + new URLSearchParams({...Object.fromEntries(search),offset:String(next)});
+    const pager = (n: number, label: string) => `<a href="${html(pageLink(n))}">${label}</a>`;
+    return ['Pedidos',`<form class="filters" method="get"><label>Buscar <input type="search" name="q" maxlength="80" value="${html(query)}" placeholder="Pedido, produto ou referência"></label>
+      <label>Pagamento <select name="status"><option value="">Todos</option>${Object.entries(orderStatuses).map(([key,label])=>`<option value="${key}"${key===filters.status?' selected':''}>${label}</option>`).join('')}</select></label>
+      <label>Período <select name="period">${[0,7,30,90].map(n=>`<option value="${n}"${n===filters.period?' selected':''}>${n ? 'Últimos '+n+' dias' : 'Todo o histórico'}</option>`).join('')}</select></label>
+      <button>Filtrar</button><a class="button" href="/admin/pedidos/exportar?${html(search.toString())}">Exportar CSV</a></form>
+      ${orderTable(orders.results.slice(0,30),pageLink(offset).slice(1))}<nav class="pager" aria-label="Paginação">${offset?pager(Math.max(0,offset-30),'← Anteriores'):''}${orders.results.length>30?pager(offset+30,'Próximos →'):''}</nav>`,path];
   }
   if (path.startsWith('/admin/pedidos/')) {
     const id = path.slice('/admin/pedidos/'.length);
@@ -188,8 +224,19 @@ async function adminPage(env: Env, db: StoreDB, url: URL, path: string) {
     if (order) {
       const events = await db.prepare('SELECT kind,status,recorded_at FROM order_events WHERE order_id=? ORDER BY id DESC LIMIT 100').bind(id)
         .all<{kind:string;status:string;recorded_at:number}>();
-      return ['Pedido',orderDetail(order,events.results),'/admin/pedidos'];
+      return ['Pedido',orderDetail(order,events.results,'/admin/pedidos' + (url.searchParams.has('voltar') ? '?' + new URLSearchParams(url.searchParams.get('voltar')!.slice(0,400)).toString() : '')),'/admin/pedidos'];
     }
+  }
+  if (path === '/admin/descontos') return ['Descontos',await couponsPage(db,env.COUPONS_ENABLED==='true',env.CHECKOUT_ENABLED==='true',offset),path];
+  if (path === '/admin/clientes') return ['Clientes',await customers(db,mode,query,offset),path];
+  if (path.startsWith('/admin/clientes/')) {
+    const id = path.slice('/admin/clientes/'.length);
+    const history = orderId.test(id) ? await customerHistory(db,mode,id,offset) : null;
+    if (history) return ['Histórico do cliente',history,'/admin/clientes'];
+  }
+  if (path === '/admin/relatorios') {
+    const period = orderFilters(url.searchParams).period || 30;
+    return ['Relatórios',reports(await insights(db,mode,period),period),path];
   }
   if (path === '/admin/arquivos') {
     const sku = url.searchParams.get('sku') ?? '';
@@ -204,9 +251,11 @@ async function adminPage(env: Env, db: StoreDB, url: URL, path: string) {
     return ['Arquivos digitais',filePage(files,Boolean(env.FILES?.put),sku,product?.version ?? '')+
       `<nav class="pager" aria-label="Paginação">${offset?pager(Math.max(0,offset-30),'← Anteriores'):''}${rows.results.length>30?pager(offset+30,'Próximos →'):''}</nav>`,path];
   }
+  if (path === '/admin/integracoes') return ['Apps e integrações',integrationPage(await operations(env,db),mode),path];
+  if (path === '/admin/loja-online') return ['Canais de venda',salesChannels(await operations(env,db),env.STORE_ORIGIN ?? ''),path];
   if (path === '/admin/configuracoes') {
     const settings = await getSettings(db) as Settings;
-    return ['Configurações',settingsPage(settings,env.CHECKOUT_ENABLED==='true',Boolean(env.MP_ACCESS_TOKEN && env.MP_WEBHOOK_SECRET),Boolean(env.FILES)),path];
+    return ['Configurações',settingsPage(settings),path];
   }
   throw new AdminError('Página não encontrada.', 404);
 }
@@ -226,6 +275,24 @@ export async function admin(request: Request, env: Env, renderPreview: () => Pro
   try {
     if (api) return await write(request, env, env.DB, actor, path);
     if (request.method !== 'GET' && request.method !== 'HEAD') return result({error:'Método não permitido.'},405);
+    if (path === '/admin/relatorios/exportar') {
+      const period = orderFilters(url.searchParams).period || 30;
+      const data = await insights(env.DB,env.MP_MODE ?? 'production',period);
+      const rows = [['Seção','Referência','Quantidade','Centavos (BRL)','Detalhe'],
+        ...data.series.map(r=>['Receita diária',r.day,null,r.revenue,null]),
+        ...data.status.map(r=>['Pedidos por estado',paymentLabel(r.label),r.qty,r.revenue,null]),
+        ...data.products.map(r=>['Vendas por produto',r.label,r.qty,r.revenue,null]),
+        ...data.categories.map(r=>['Vendas por categoria',r.label,r.qty,r.revenue,null]),
+        ...data.events.map(r=>['Atividade',r.id,null,null,new Date(r.recorded_at*1000).toISOString()+' '+(r.kind==='verification_failed'?'Verificação divergente':paymentLabel(r.status))])];
+      return new Response(request.method==='HEAD'?null:csv(rows),{headers:{...privacy,'content-type':'text/csv; charset=utf-8','content-disposition':'attachment; filename="relatorios.csv"'}});
+    }
+    if (path === '/admin/pedidos/exportar') {
+      const { results } = await orderRows(env.DB,env.MP_MODE ?? 'production',orderFilters(url.searchParams),5001,0);
+      if (results.length > 5000) return result({error:'Mais de 5.000 pedidos. Restrinja o período ou o filtro.'},422);
+      const rows = [['Pedido','SKU','Produto','Centavos (BRL)','Desconto em centavos','Cupom','Estado','Order Mercado Pago','Pagamento Mercado Pago','Criado (UTC)'],
+        ...results.map(o=>[o.id,o.sku,o.title,o.price_cents,o.discount_cents,o.coupon_code,paymentLabel(o.status),o.remote_id,o.payment_id,new Date(o.created_at*1000).toISOString()])];
+      return new Response(request.method==='HEAD'?null:csv(rows),{headers:{...privacy,'content-type':'text/csv; charset=utf-8','content-disposition':'attachment; filename="pedidos.csv"'}});
+    }
     if (path.startsWith('/admin/midia/')) return publicImage(env.DB,path.slice('/admin/midia/'.length),true);
     if (path.startsWith('/admin/previa/')) {
       const response = await renderPreview();

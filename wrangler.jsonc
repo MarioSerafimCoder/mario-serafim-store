@@ -34,6 +34,7 @@
       "vars": {
         "CHECKOUT_ENABLED": "false",
         "DYNAMIC_CATALOG": "true",
+        "COUPONS_ENABLED": "true",
         "ADMIN_ACCESS_ISSUER": "https://wispy-hall-9782.cloudflareaccess.com",
         "ADMIN_ACCESS_AUD": "42189fa4211877b3e646914b03d9ef001b31d86c35aee1a69981d3d0fdca7d12",
         "MP_MODE": "test",

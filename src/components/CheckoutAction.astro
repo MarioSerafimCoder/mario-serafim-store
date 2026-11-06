@@ -9,7 +9,11 @@ const { sku, priceCents } = Astro.props;
 
 <store-checkout data-sku={sku} data-price-cents={priceCents}>
   <p class="purchase-state"><span class="signal" aria-hidden="true"></span>Compra indisponível nesta etapa.</p>
-  <button type="button" class="action" hidden>Comprar com Mercado Pago</button>
+  <button type="button" class="action" data-checkout hidden>Comprar com Mercado Pago</button>
+  <section data-coupon hidden aria-label="Desconto">
+    <label> Cupom <input class="catalog-select" maxlength="24" autocomplete="off" spellcheck="false" /></label>
+    <button type="button" class="text-link">Conferir cupom</button>
+  </section>
   <p role="status"></p>
   <div class="article" hidden>
     <p>Guarde este código para recuperar sua compra em outro navegador ou dispositivo.</p>
@@ -25,11 +29,14 @@ const { sku, priceCents } = Astro.props;
   class StoreCheckout extends HTMLElement {
     async connectedCallback() {
       const sku = this.dataset.sku;
-      const button = this.querySelector('button');
+      const button = this.querySelector<HTMLButtonElement>('[data-checkout]');
+      const couponBox = this.querySelector<HTMLElement>('[data-coupon]');
+      const couponField = couponBox?.querySelector('input');
+      const quoteButton = couponBox?.querySelector('button');
       const notice = this.querySelector<HTMLElement>('.purchase-state');
       const status = this.querySelector('[role="status"]');
       const next = this.querySelector('div');
-      const codeField = this.querySelector('input');
+      const codeField = next?.querySelector('input');
       const link = this.querySelector('a');
       if (!sku || !button || !notice || !status || !next || !codeField || !link) return;
 
@@ -43,24 +50,56 @@ const { sku, priceCents } = Astro.props;
         return;
       }
 
-      const key = `store-checkout:${sku}`;
-      let code = crypto.randomUUID();
-      try {
-        const previous = sessionStorage.getItem(key);
-        if (previous) code = previous as typeof code;
-        sessionStorage.setItem(key, code);
-      } catch {}
+      let discount: { coupon: string; totalCents: number } | null = null;
+      let quotePending = false;
+      const brl = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
+      if (availability.coupons === true && couponBox && couponField && quoteButton) {
+        couponBox.hidden = false;
+        couponField.addEventListener('input', () => { discount = null; status.textContent = ''; });
+        quoteButton.addEventListener('click', async () => {
+          discount = null;
+          quotePending = quoteButton.disabled = true;
+          status.textContent = 'Conferindo cupom…';
+          const coupon = couponField.value.trim();
+          try {
+            const response = await fetch('/compras/api/cotacao',{
+              method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sku,coupon,expectedPriceCents}),
+            });
+            const result = await response.json();
+            if (couponField.value.trim() !== coupon) return;
+            if (!response.ok) { status.textContent = result.error; return; }
+            discount = {coupon:result.coupon,totalCents:result.totalCents};
+            status.textContent = 'Total com desconto: ' + brl.format(result.totalCents/100) + '.';
+          } catch { status.textContent = 'Não foi possível conferir o cupom.'; }
+          finally { quotePending = quoteButton.disabled = false; }
+        });
+      }
 
       notice.hidden = true;
       button.hidden = false;
       button.addEventListener('click', async () => {
+        if (quotePending) return;
+        if (couponField?.value.trim() && !discount) {
+          status.textContent = 'Confira o cupom ou limpe o campo para continuar.';
+          return;
+        }
+        const offer = discount;
+        const key = 'store-checkout:' + sku + (offer ? ':' + offer.coupon : '');
+        let code = crypto.randomUUID();
+        try {
+          const previous = sessionStorage.getItem(key);
+          if (previous) code = previous as typeof code;
+          sessionStorage.setItem(key, code);
+        } catch {}
         button.disabled = true;
+        if (couponField) couponField.disabled = true;
+        if (quoteButton) quoteButton.disabled = true;
         status.textContent = 'Preparando seu pedido…';
         try {
           const response = await fetch('/compras/api/checkout', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ sku, code, expectedPriceCents }),
+            body: JSON.stringify({ sku, code, expectedPriceCents, ...(offer ? {coupon:offer.coupon,expectedTotalCents:offer.totalCents} : {}) }),
           });
           const result = await response.json();
           if (!response.ok) {
@@ -78,12 +117,15 @@ const { sku, priceCents } = Astro.props;
           link.href = result.checkoutUrl;
           next.hidden = false;
           button.hidden = true;
-          status.textContent = 'Pedido preparado.';
+          status.textContent = offer ? 'Pedido preparado. Total: ' + brl.format(offer.totalCents/100) + '.' : 'Pedido preparado.';
           codeField.focus();
         } catch {
           status.textContent = 'Não foi possível conectar. Tente novamente nesta mesma aba.';
         } finally {
           button.disabled = false;
+          if (couponField) couponField.disabled = false;
+          if (quoteButton) quoteButton.disabled = false;
+          if (couponBox && button.hidden) couponBox.hidden = true;
         }
       });
     }

@@ -7,7 +7,7 @@ interface Statement {
 
 export interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
-  DB?: { prepare(sql: string): Statement; batch(statements: Statement[]): Promise<{ results: unknown[] }[]> };
+  DB?: { prepare(sql: string): Statement; batch(statements: Statement[]): Promise<{ results: unknown[]; meta?: {changes:number} }[]> };
   FILES?: {
     head(key: string): Promise<unknown>;
     get(key: string): Promise<{ body: ReadableStream; size: number } | null>;
@@ -20,6 +20,7 @@ export interface Env {
   ADMIN_EMAIL?: string;
   STORE_ORIGIN?: string;
   CHECKOUT_ENABLED?: string;
+  COUPONS_ENABLED?: string;
   MP_MODE?: 'test' | 'production';
   MP_SELLER_ID?: string;
   MP_ACCESS_TOKEN?: string;
@@ -41,6 +42,8 @@ export interface Order {
   sku: string;
   title: string;
   price_cents: number;
+  coupon_code?: string | null;
+  discount_cents?: number;
   currency: 'BRL';
   object_key: string;
   filename: string;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createSign, generateKeyPairSync, randomUUID } from 'node:crypto';
+import { createHmac, createSign, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { admin } from '../worker/admin.ts';
@@ -26,7 +26,7 @@ function jwt(override = {}) {
 function database(t) {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
-  for (const file of ['0001_commerce.sql','0002_admin.sql']) db.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
+  for (const file of ['0001_commerce.sql','0002_admin.sql','0003_admin_insights.sql','0004_coupons.sql']) db.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
   function statement(sql, args = []) {
     const stmt = db.prepare(sql);
     const values = args.map((value) => value instanceof ArrayBuffer ? new Uint8Array(value) : value);
@@ -54,7 +54,7 @@ function database(t) {
 test('admin verifica identidade, protege mutações e mantém catálogo e pedidos coerentes', async (t) => {
   const { raw, binding } = database(t);
   const env = { DB: binding, STORE_ORIGIN: origin, ADMIN_ACCESS_ISSUER: issuer, ADMIN_ACCESS_AUD: audience,
-    ADMIN_EMAIL: owner, MP_MODE: 'test', DYNAMIC_CATALOG: 'true', CHECKOUT_ENABLED: 'false' };
+    ADMIN_EMAIL: owner, MP_MODE: 'test', DYNAMIC_CATALOG: 'true', CHECKOUT_ENABLED: 'false', COUPONS_ENABLED:'true' };
   const key = { ...publicKey.export({ format: 'jwk' }), kid: 'fixture-key' };
   t.mock.method(globalThis,'fetch',async (url, options) => {
     assert.equal(url, issuer + '/cdn-cgi/access/certs');
@@ -125,10 +125,34 @@ test('admin verifica identidade, protege mutações e mantém catálogo e pedido
   raw.prepare(`INSERT INTO orders(id,recovery_hash,sku,title,price_cents,currency,object_key,filename,mode,seller,created_at)
     VALUES(?,?,?,?,1990,'BRL','private/original','original.zip','test','10',unixepoch())`).run(id, 'fixture', 'ART-1', 'Nome histórico');
   assert.match(await (await call('/admin/pedidos/'+id)).text(), /Nome histórico/);
+  for (const path of ['/admin/produtos/categorias','/admin/clientes','/admin/relatorios','/admin/descontos','/admin/integracoes','/admin/loja-online']) {
+    const page = await call(path);
+    assert.equal(page.status,200,path + ' ' + (page.status!==200 ? await page.text() : ''));
+    assert.match(await page.text(),/aria-current="page"/);
+    assert.equal((await call(path,{token:''})).status,403);
+  }
+  assert.match(await (await call('/admin/pedidos?q=ART-1&status=created')).text(),/Nome histórico/);
+  assert.doesNotMatch(await (await call('/admin/pedidos?q=ART-1&status=approved')).text(),/Nome histórico/);
+  raw.prepare("UPDATE orders SET status='approved',buyer_email='buyer@example.test',category_at_purchase='Design',title='=2+2' WHERE id=?").run(id);
+  assert.match(await (await call('/admin/clientes')).text(),/buyer@example.test/);
+  assert.match(await (await call('/admin/clientes/'+id)).text(),/buyer@example.test/);
+  assert.match(await (await call('/admin/relatorios')).text(),/Design/);
+  const exportOrders = await call('/admin/pedidos/exportar?status=approved');
+  assert.match(exportOrders.headers.get('content-disposition'),/attachment/);
+  assert.match(await exportOrders.text(),/"'=2\+2"/);
+  assert.match(await (await call('/admin/relatorios/exportar')).text(),/Receita diária/);
+  assert.equal((await call('/admin/pedidos/exportar',{token:''})).status,403);
+  await status('/admin/api/cupons',{code:'FIXED',kind:'fixed',value:'2,00',expires:'2099-12-31',maxUses:5,sku:'ART-1',active:true,revision:0});
+  await status('/admin/api/cupons',{code:'FIXED',kind:'fixed',value:'2,00',expires:'2099-12-31',maxUses:5,sku:'ART-1',active:true,revision:0},409);
+  await status('/admin/api/cupons',{code:'FIXED',kind:'percent',value:'10',expires:'2099-12-31',maxUses:5,sku:'ART-1',active:false,revision:1});
+  assert.equal(raw.prepare("SELECT active FROM coupons WHERE code='FIXED'").get().active,0);
   await status(api+'/ART-1/despublicar',{revision:6});
   assert.equal(raw.prepare('SELECT price_cents,object_key FROM orders WHERE id=?').get(id).price_cents,1990);
   assert.equal(raw.prepare('SELECT object_key FROM orders WHERE id=?').get(id).object_key,'private/original');
   assert.equal((await publicImage(binding,src.slice(7))).status,404);
+  await status('/admin/api/categorias',{from:'Templates',name:'Design editorial'});
+  assert.match(await (await call('/admin/produtos?category=Design+editorial')).text(),/Arte inicial/);
+  assert.equal(raw.prepare('SELECT category_at_purchase FROM orders WHERE id=?').get(id).category_at_purchase,'Design');
   assert.ok(raw.prepare('SELECT count(*) AS n FROM admin_events').get().n >= 9);
 });
 
@@ -158,4 +182,74 @@ test('checkout usa o preço e a versão do D1 e rejeita cotação antiga', async
   const order = raw.prepare('SELECT price_cents,object_key FROM orders').get();
   assert.equal(order.price_cents,2500);
   assert.equal(order.object_key,'private/version-1');
+});
+
+test('cupom confere cotação, reserva uma vez e cobra o total no Mercado Pago', async (t) => {
+  const {raw,binding} = database(t);
+  raw.exec(`
+    INSERT INTO products(sku,slug,name,category,price_cents,version,status,details) VALUES
+      ('SALE-1','sale','Produto','Design',2500,'1','published','{}'),
+      ('OTHER-1','other','Outro','Design',2500,'1','published','{}');
+    INSERT INTO fulfillment VALUES('SALE-1','1','private/one','one.zip',1),('OTHER-1','1','private/two','two.zip',1);
+    INSERT INTO coupons(code,kind,value,expires_at,max_uses,sku,active) VALUES
+      ('SALE10','percent',10,unixepoch()+86400,1,'SALE-1',1),
+      ('OLD10','percent',10,unixepoch()-1,5,NULL,1),
+      ('INACTIVE','fixed',500,unixepoch()+86400,5,NULL,0),
+      ('TOOLOW','fixed',2499,unixepoch()+86400,5,NULL,1);
+  `);
+  const provider = 'ORDTST01J49MMW3SSBK5PSV3DFR32959';
+  const secret = 'test-webhook-fixture';
+  const env = { DB:binding, DYNAMIC_CATALOG:'true', COUPONS_ENABLED:'true', CHECKOUT_ENABLED:'true', STORE_ORIGIN:origin,
+    MP_MODE:'test', MP_SELLER_ID:'123', MP_ACCESS_TOKEN:'fixture', MP_WEBHOOK_SECRET:secret,
+    STORE_SESSION_SECRET:'fixture-not-a-real-session-secret-32', FILES:{head:async()=>({}),get:async()=>null} };
+  let requests=0;
+  let remote;
+  t.mock.method(globalThis,'fetch',async (url, options) => {
+    if (url.endsWith('/'+provider)) return Response.json(remote);
+    requests++;
+    const body = JSON.parse(options.body);
+    assert.equal(body.total_amount,'22.50');
+    assert.equal(body.items[0].unit_price,'22.50');
+    assert.equal(options.headers['x-idempotency-key'],body.external_reference);
+    remote = {id:provider,type:'online',processing_mode:'manual',user_id:'123',country_code:'BRA',currency:'BRL',
+      external_reference:body.external_reference,total_amount:'22.50',checkout_url:'https://www.mercadopago.com.br/checkout/v1/redirect'};
+    return Response.json(remote);
+  });
+  const post = (path, body, headers = {}) => commerce.fetch(new Request(origin+'/compras/api/'+path,{
+    method:'POST',headers:{origin,'content-type':'application/json',...headers},body:JSON.stringify(body),
+  }),env);
+  const offer = {sku:'SALE-1',coupon:'SALE10',expectedPriceCents:2500};
+  const quote = await post('cotacao',offer);
+  assert.deepEqual(await quote.json(),{coupon:'SALE10',discountCents:250,totalCents:2250});
+  for (const item of [{sku:'OTHER-1'}, {coupon:'OLD10'}, {coupon:'INACTIVE'}, {coupon:'TOOLOW'}]) {
+    assert.equal((await post('cotacao',{...offer,...item})).status,422);
+  }
+  const base = {...offer,code:randomUUID(),expectedTotalCents:2250};
+  assert.equal((await post('checkout',{...base,expectedTotalCents:100})).status,412);
+  assert.equal((await post('checkout',{...base,priceCents:100})).status,400);
+  assert.equal(raw.prepare('SELECT count(*) n FROM orders').get().n,0);
+  const both = await Promise.all([post('checkout',base),post('checkout',{...base,code:randomUUID()})]);
+  assert.deepEqual(both.map(r=>r.status).sort(),[200,412]);
+  const order = raw.prepare('SELECT id,price_cents,discount_cents,coupon_code,category_at_purchase FROM orders').get();
+  assert.equal(order.price_cents,2250);
+  assert.equal(order.discount_cents,250);
+  assert.equal(order.coupon_code,'SALE10');
+  assert.equal(order.category_at_purchase,'Design');
+  assert.equal((await post('checkout',base)).status,200);
+  assert.equal(requests,1);
+  assert.equal((await post('cotacao',offer)).status,422);
+  const ts = Math.floor(Date.now()/1000);
+  const reqId = 'signed-test';
+  const signature = createHmac('sha256',secret).update('id:'+provider+';request-id:'+reqId+';ts:'+ts+';').digest('hex');
+  const notify = () => post('webhook?data.id='+provider,{}, {'x-signature':'ts='+ts+',v1='+signature,'x-request-id':reqId});
+  Object.assign(remote,{status:'processed',status_detail:'accredited',total_paid_amount:'22.50',last_updated_date:new Date().toISOString(),
+    payer:{email:'Cliente@Example.test'},transactions:{payments:[{id:'PAY01J67CQQH5904WDBVZEM4JMEP3',amount:'22.50',status:'processed',status_detail:'accredited'}]}});
+  remote.total_amount='25.00';
+  assert.equal((await notify()).status,200);
+  assert.equal(raw.prepare('SELECT buyer_email FROM orders').get().buyer_email,null);
+  remote.total_amount='22.50';
+  assert.equal((await notify()).status,200);
+  const paid=raw.prepare('SELECT status,buyer_email FROM orders').get();
+  assert.equal(paid.status,'approved');
+  assert.equal(paid.buyer_email,'cliente@example.test');
 });

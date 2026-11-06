@@ -38,6 +38,7 @@ interface RemoteOrder {
   country_code: string;
   currency: string;
   checkout_url?: string;
+  payer?: { email?: string };
   status: string;
   status_detail: string;
   last_updated_date: string;

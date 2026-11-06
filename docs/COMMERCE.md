@@ -14,6 +14,10 @@ A aplicação `Check-out-pro` usa Checkout Pro com a API de Orders. Use a [docum
 - Use a credencial de vendedor de teste indicada para **Checkout Pro com Orders** e um comprador de teste separado. Confirme o ID do vendedor, o prefixo da order de teste, o retorno e o webhook com uma compra simulada oficial antes de habilitar produção.
 - Quando o R2 estiver disponível, use um bucket privado exclusivo para homologação e vincule-o como `FILES`. Cadastre um produto no painel desse ambiente, envie seu arquivo e permita novas entregas. Só então habilite `CHECKOUT_ENABLED` em homologação.
 
+### Cupons
+
+`COUPONS_ENABLED=true` libera o módulo no ambiente configurado. O formulário público também depende de um checkout disponível para o SKU. O cupom reduz o valor do item e o total enviado à Orders API na mesma proporção. A reconciliação verifica esse total gravado no pedido. Cada pedido com cupom consome uma reserva, inclusive em abandono. Antes de habilitar cupons em produção, valide um pagamento de teste com desconto, reconciliação e entrega no R2.
+
 ## Produção e operação
 
 - Use um banco D1 de produção distinto, aplique `migrations/0001_commerce.sql` e vincule-o como `DB`. Configure um bucket R2 privado de produção como `FILES`, com acesso público desabilitado.

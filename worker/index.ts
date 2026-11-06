@@ -1,5 +1,6 @@
 import { createRemoteOrder, getRemoteOrder, hex, hmacKey, paymentState, validProviderId, validWebhook, verifyHmac, verifyOrder } from './mercado-pago.ts';
 import type { Env, Order, Product } from './types.ts';
+import { couponDiscount, couponPattern, eligibleCoupon, minimumCharged } from './coupons.ts';
 import { catalogOffer } from './catalog.ts';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -98,10 +99,36 @@ async function available(env: Ready, sku: string) {
   return { product, file };
 }
 
+function couponInput(value: unknown) {
+  const code = typeof value === 'string' && value.length <= 24 ? value.trim().toUpperCase() : '';
+  return couponPattern.test(code) ? code : null;
+}
+
+async function quote(request: Request, env: Ready) {
+  if (env.COUPONS_ENABLED !== 'true' || env.DYNAMIC_CATALOG !== 'true') return error('Cupons indisponíveis.',404);
+  const body = await readBody(request);
+  const code = couponInput(body?.coupon);
+  if (!body || typeof body.sku !== 'string' || body.sku.length > 80 || !skuPattern.test(body.sku) || !code) {
+    return error('Informe um cupom válido.',400);
+  }
+  const offer = await available(env,body.sku);
+  if (!offer) return error('Produto indisponível.',404);
+  const price = offer.product.priceCents;
+  if (body.expectedPriceCents !== price) return error('O preço mudou. Recarregue a página.',412);
+  const discount = await couponDiscount(env.DB,code,body.sku,price);
+  if (discount === null) return error('Cupom indisponível para este produto.',422);
+  return json({coupon:code,discountCents:discount,totalCents:price-discount});
+}
+
 async function checkout(request: Request, env: Ready) {
   const body = await readBody(request);
   const dynamic = env.DYNAMIC_CATALOG === 'true';
-  if (!body || Object.keys(body).length !== (dynamic ? 3 : 2) || (dynamic && !Number.isSafeInteger(body.expectedPriceCents))
+  const couponRequested = body && (Object.hasOwn(body,'coupon') || Object.hasOwn(body,'expectedTotalCents'));
+  const coupon = couponRequested ? couponInput(body?.coupon) : null;
+  const allowed = dynamic ? ['sku','code','expectedPriceCents',...(couponRequested ? ['coupon','expectedTotalCents'] : [])] : ['sku','code'];
+  if (!body || Object.keys(body).length !== allowed.length || Object.keys(body).some(key=>!allowed.includes(key)) ||
+      (couponRequested && (!dynamic || env.COUPONS_ENABLED !== 'true' || !coupon || !Number.isSafeInteger(body.expectedTotalCents))) ||
+      (dynamic && !Number.isSafeInteger(body.expectedPriceCents))
       || typeof body.sku !== 'string' || !skuPattern.test(body.sku)
       || body.sku.length > 80 || typeof body.code !== 'string' || !uuid.test(body.code)) {
     return error('Dados de compra inválidos.', 400);
@@ -118,10 +145,21 @@ async function checkout(request: Request, env: Ready) {
     if (dynamic && body.expectedPriceCents !== product.priceCents) return error('O preço mudou. Recarregue a página.', 412);
     const snapshot = [crypto.randomUUID(), recoveryHash, product.sku, product.name.slice(0, 127), product.priceCents,
       product.currency, file.object_key, file.filename, env.MP_MODE, env.MP_SELLER_ID, now()];
-    if (dynamic) {
+    if (coupon) {
       await env.DB.prepare(`
-        INSERT INTO orders(id, recovery_hash, sku, title, price_cents, currency, object_key, filename, mode, seller, created_at)
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM products p
+        WITH offer AS (${eligibleCoupon})
+        INSERT INTO orders(id,recovery_hash,sku,title,price_cents,currency,object_key,filename,mode,seller,created_at,category_at_purchase,coupon_code,discount_cents)
+        SELECT ?,?,?,?,p.price_cents-offer.discount,?,?,?,?,?,?,p.category,offer.code,offer.discount FROM products p
+        JOIN fulfillment f ON f.sku=p.sku AND f.version=p.version AND f.enabled=1 CROSS JOIN offer
+        WHERE p.sku=? AND p.status='published' AND p.price_cents=? AND p.version=? AND p.name=? AND f.object_key=?
+          AND offer.discount>0 AND p.price_cents-offer.discount>=? AND p.price_cents-offer.discount=?
+        ON CONFLICT(recovery_hash) DO NOTHING
+      `).bind(coupon,product.sku,...snapshot.slice(0,4),...snapshot.slice(5),
+        product.sku,product.priceCents,product.version,product.name,file.object_key,minimumCharged,Number(body.expectedTotalCents)).run();
+    } else if (dynamic) {
+      await env.DB.prepare(`
+        INSERT INTO orders(id, recovery_hash, sku, title, price_cents, currency, object_key, filename, mode, seller, created_at, category_at_purchase)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, p.category FROM products p
         JOIN fulfillment f ON f.sku=p.sku AND f.version=p.version AND f.enabled=1
         WHERE p.sku=? AND p.status='published' AND p.price_cents=? AND p.version=? AND p.name=? AND f.object_key=?
         ON CONFLICT(recovery_hash) DO NOTHING
@@ -131,12 +169,15 @@ async function checkout(request: Request, env: Ready) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(recovery_hash) DO NOTHING
     `).bind(...snapshot).run();
     order = await find();
-    if (dynamic && !order) return error('O produto mudou. Recarregue a página.', 412);
+    if (dynamic && !order) return error(coupon ? 'Cupom, preço ou disponibilidade mudou. Confira novamente.' : 'O produto mudou. Recarregue a página.', 412);
   }
   if (!order || order.sku !== body.sku || order.mode !== env.MP_MODE || order.seller !== env.MP_SELLER_ID) {
     return error('Essa tentativa de compra pertence a outro pedido.', 409);
   }
-  if (dynamic && order.price_cents !== body.expectedPriceCents) return error('Há um pedido anterior com outro preço. Consulte-o antes de continuar.', 409);
+  if (dynamic && ((order.coupon_code ?? null) !== coupon || order.price_cents + (order.discount_cents ?? 0) !== body.expectedPriceCents ||
+    (coupon && order.price_cents !== body.expectedTotalCents))) {
+    return error('Há um pedido anterior com outro preço ou cupom. Consulte-o antes de continuar.',409);
+  }
   if (order.created_at + 86400 <= now() || !['created', 'pending'].includes(order.status)) {
     return error('Acesse seu pedido para consultar o pagamento.', 409);
   }
@@ -162,15 +203,20 @@ async function reconcile(env: Ready, order: Order, remoteId: string) {
   const updated = Date.parse(remote.last_updated_date);
   if (!Number.isFinite(updated)) return false;
   const { status, payment } = paymentState(remote, order);
+  const dynamic = env.DYNAMIC_CATALOG === 'true';
+  const email = status === 'approved' && typeof remote.payer?.email === 'string' ? remote.payer.email.trim().toLowerCase() : '';
+  const buyer = email.length <= 254 &&
+    /^[a-z0-9.!#$%&'+/=?^_`{|}~-]{1,64}@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/.test(email) ? email : null;
   await env.DB.prepare(`
     UPDATE orders SET status = ?, payment_id = COALESCE(?, payment_id), provider_updated = ?, last_check = ?
+    ${dynamic ? ', buyer_email = COALESCE(buyer_email, ?)' : ''}
     WHERE id = ? AND remote_id = ? AND (
       provider_updated < ? OR (provider_updated = ? AND (
         status = ? OR (status IN ('created','pending') AND ? NOT IN ('created','pending'))
         OR (status = 'approved' AND ? IN ('review','canceled','refunded','disputed'))
       ))
     ) AND (status NOT IN ('refunded','disputed') OR ? <> 'approved')
-  `).bind(status, payment, updated, now(), order.id, order.remote_id, updated, updated, status, status, status, status).run();
+  `).bind(status, payment, updated, now(), ...(dynamic ? [buyer] : []), order.id, order.remote_id, updated, updated, status, status, status, status).run();
   return true;
 }
 
@@ -238,8 +284,9 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (route === '/compras/api/disponibilidade' && request.method === 'GET') {
     const sku = url.searchParams.get('sku') ?? '';
     const offer = sku.length <= 80 && skuPattern.test(sku) ? await available(env, sku) : null;
-    return json({ available: Boolean(offer), ...(env.DYNAMIC_CATALOG === 'true' && offer ? { priceCents: offer.product.priceCents } : {}) });
+    return json({ available: Boolean(offer), ...(env.DYNAMIC_CATALOG === 'true' && offer ? { priceCents: offer.product.priceCents, coupons: env.COUPONS_ENABLED === 'true' } : {}) });
   }
+  if (route === '/compras/api/cotacao' && request.method === 'POST') return quote(request,env);
   if (route === '/compras/api/checkout' && request.method === 'POST') return checkout(request, env);
   if (route === '/compras/api/recuperar' && request.method === 'POST') return recover(request, env);
   const order = await session(request, env);
