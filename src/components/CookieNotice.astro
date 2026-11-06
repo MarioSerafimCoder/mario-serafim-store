@@ -1,0 +1,27 @@
+<section class="cookie-notice" aria-label="Cookies e privacidade" data-cookie-notice hidden>
+  <p>Usamos cookies essenciais para compras e acesso aos pedidos. O carrinho e a preferência de tema ficam salvos neste navegador. Saiba como tratamos seus dados na <a class="text-link" href="/privacidade/">Política de Privacidade</a>.</p>
+  <button class="action" type="button" data-cookie-accept>Aceitar e continuar</button>
+</section>
+
+<script>
+  const notice = document.querySelector<HTMLElement>('[data-cookie-notice]');
+  const accept = notice?.querySelector<HTMLButtonElement>('[data-cookie-accept]');
+  if (notice && accept) {
+    const key = 'store-cookie-notice-v1';
+    let accepted = false;
+    try { accepted = localStorage.getItem(key) === 'accepted'; } catch {}
+    notice.hidden = accepted;
+    accept.addEventListener('click', () => {
+      try { localStorage.setItem(key, 'accepted'); } catch {}
+      notice.hidden = true;
+    });
+  }
+</script>
+
+<style>
+  .cookie-notice { position: fixed; inset-inline: 1rem; bottom: 1rem; z-index: 40; display: flex; align-items: center; gap: 1.25rem; max-width: 66rem; margin-inline: auto; padding: 1rem 1.25rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--surface); color: var(--ink); box-shadow: 0 8px 32px rgb(0 0 0 / .16); }
+  .cookie-notice[hidden] { display: none; }
+  p { margin: 0; font-size: .875rem; line-height: 1.5; }
+  button { flex-shrink: 0; cursor: pointer; }
+  @media (max-width: 640px) { .cookie-notice { inset-inline: .75rem; bottom: .75rem; flex-direction: column; align-items: stretch; gap: .75rem; padding: 1rem; } }
+</style>

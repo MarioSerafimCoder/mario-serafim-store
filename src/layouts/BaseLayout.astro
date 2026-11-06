@@ -5,6 +5,7 @@ import '../styles/global.css';
 import Seo from '../components/Seo.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import CookieNotice from '../components/CookieNotice.astro';
 
 interface Props extends ComponentProps<typeof Seo> {}
 
@@ -58,5 +59,6 @@ const seo = Astro.props;
       <slot />
     </main>
     <Footer />
+    <CookieNotice />
   </body>
 </html>
