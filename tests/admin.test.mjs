@@ -26,7 +26,7 @@ function jwt(override = {}) {
 function database(t) {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
-  for (const file of ['0001_commerce.sql','0002_admin.sql','0003_admin_insights.sql','0004_coupons.sql','0005_cart_checkout.sql','0006_commercial_identity.sql']) db.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
+  for (const file of ['0001_commerce.sql','0002_admin.sql','0003_admin_insights.sql','0004_coupons.sql','0005_cart_checkout.sql','0006_commercial_identity.sql','0007_email_delivery.sql']) db.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
   function statement(sql, args = []) {
     const stmt = db.prepare(sql);
     const values = args.map((value) => value instanceof ArrayBuffer ? new Uint8Array(value) : value);
@@ -194,6 +194,43 @@ test('checkout usa o preço e a versão do D1 e rejeita cotação antiga', async
   const order = raw.prepare('SELECT price_cents,object_key FROM orders').get();
   assert.equal(order.price_cents,2500);
   assert.equal(order.object_key,'private/version-1');
+});
+
+test('admin reenvia entrega apenas após confirmar pagamento aprovado no Mercado Pago', async (t) => {
+  const { raw, binding } = database(t);
+  const id = randomUUID();
+  const provider = 'ORDTST01J49MMW3SSBK5PSV3DFR32961';
+  const env = { DB:binding, STORE_ORIGIN:origin, ADMIN_ACCESS_ISSUER:issuer, ADMIN_ACCESS_AUD:audience,
+    ADMIN_EMAIL:owner, MP_MODE:'test', MP_SELLER_ID:'10', MP_ACCESS_TOKEN:'fixture', STORE_SESSION_SECRET:'fixture-not-a-real-session-secret-32',
+    EMAIL_DELIVERY_ENABLED:'true', RESEND_API_KEY:'fixture', STORE_EMAIL_FROM:'store@example.test',
+    FILES:{head:async()=>({}),get:async()=>null} };
+  raw.prepare(`INSERT INTO orders(id,recovery_hash,sku,title,price_cents,currency,object_key,filename,mode,seller,status,
+      remote_id,created_at,provider_updated,buyer_email)
+    VALUES(?,?,'ART-1','Produto',1990,'BRL','private/original','original.zip','test','10','approved',?,unixepoch(),0,'buyer@example.test')`)
+    .run(id,'fixture',provider);
+  raw.prepare("INSERT INTO email_deliveries(purchase_id,email,state,first_attempt,last_attempt) VALUES(?,?,'failed',unixepoch()-600,unixepoch()-600)")
+    .run(id,'buyer@example.test');
+  const key = { ...publicKey.export({ format:'jwk' }), kid:'fixture-key' };
+  const remote = { id:provider, type:'online', processing_mode:'manual', external_reference:id, total_amount:'19.90',
+    total_paid_amount:'19.90', user_id:'10', country_code:'BRA', currency:'BRL', status:'processed', status_detail:'accredited',
+    last_updated_date:new Date(Date.now()+60_000).toISOString(),
+    transactions:{payments:[{id:'PAY01J67CQQH5904WDBVZEM4JMEP3',amount:'19.90',status:'processed',status_detail:'accredited'}]} };
+  let sent = 0;
+  t.mock.method(globalThis,'fetch',async (url) => {
+    if (url===issuer+'/cdn-cgi/access/certs') return Response.json({keys:[key]});
+    if (url==='https://api.mercadopago.com/v1/orders/'+provider) return Response.json(remote);
+    if (url==='https://api.resend.com/emails') { sent++; return Response.json({id:'admin-resend-fixture'}); }
+    assert.fail('URL de saída inesperada: '+url);
+  });
+  const response = await admin(new Request(origin+'/admin/api/entregas/'+id+'/reenviar',{
+    method:'POST',headers:{origin,'cf-access-jwt-assertion':jwt(), 'content-length':'0'},
+  }),env,async()=>new Response(''));
+  assert.equal(response.status,303);
+  assert.equal(response.headers.get('location'),'/admin/pedidos/'+id);
+  assert.equal(sent,1);
+  const delivery = raw.prepare('SELECT state,generation,attempts,provider_id FROM email_deliveries WHERE purchase_id=?').get(id);
+  assert.deepEqual({...delivery},{state:'accepted',generation:1,attempts:1,provider_id:'admin-resend-fixture'});
+  assert.equal(raw.prepare("SELECT COUNT(*) n FROM admin_events WHERE action='entrega.reenviada'").get().n,1);
 });
 
 test('cupom confere cotação, reserva uma vez e cobra o total no Mercado Pago', async (t) => {

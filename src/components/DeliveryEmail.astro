@@ -1,0 +1,14 @@
+---
+const { id } = Astro.props as { id: string };
+---
+<div data-delivery-email hidden>
+  <label for={id}>E-mail para recebimento do seu produto digital</label>
+  <input class="catalog-select" id={id} type="email" maxlength="254" autocomplete="email"
+    placeholder="seuemail@exemplo.com" aria-describedby={id + '-help'} required />
+  <p id={id + '-help'}>Enviaremos seu produto para este endereço após a confirmação do pagamento. Confira se está correto.</p>
+</div>
+<style>
+  div:not([hidden]) { display: grid; gap: .35rem; }
+  label { font-weight: 650; }
+  p { font-size: .85rem; color: var(--muted); }
+</style>

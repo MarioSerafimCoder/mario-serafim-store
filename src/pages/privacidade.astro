@@ -17,7 +17,7 @@ import CommercialIdentity from '../components/CommercialIdentity.astro';
       <li><strong>Navegação:</strong> o provedor de infraestrutura pode processar dados técnicos de conexão e requisições para entregar o site, proteger o serviço e diagnosticar falhas. A configuração e a retenção desses registros pelo provedor dependem dos serviços contratados.</li>
       <li><strong>Compra:</strong> a loja registra produto, SKU, preço, moeda, identificadores do pedido e do Mercado Pago, estado do pagamento e datas necessárias para conciliar o pedido e liberar ou revogar downloads.</li>
       <li><strong>Recuperação e acesso:</strong> a chave de recuperação é usada para localizar o pedido, e a sessão da compra é mantida por cookie restrito ao caminho de compras. A chave não é armazenada em texto claro no banco. O código do fluxo individual fica no armazenamento de sessão do navegador para retomar o processo naquela sessão.</li>
-      <li><strong>E-mail do comprador:</strong> quando o Mercado Pago retorna um e-mail após a aprovação, a loja o registra para identificar o pedido e prestar atendimento. A loja não pede e-mail em um formulário próprio.</li>
+      <li><strong>E-mail do comprador:</strong> quando a entrega por e-mail estiver disponível, usamos o endereço informado no checkout para enviar os produtos por meio do Resend e prestar suporte à compra. O Mercado Pago também pode fornecer um endereço para identificação do pedido.</li>
       <li><strong>Administração:</strong> o painel é protegido pelo Cloudflare Access e registra ações administrativas para operação e auditoria.</li>
     </ul>
 
@@ -29,7 +29,7 @@ import CommercialIdentity from '../components/CommercialIdentity.astro';
 
     <h2>Bases, retenção e segurança</h2>
     <p>O tratamento ligado ao pedido e à entrega é necessário para realizar as etapas solicitadas na compra. Registros também podem ser mantidos para cumprir obrigações aplicáveis e resguardar direitos. O uso de dados técnicos para segurança e prevenção de abuso depende da configuração dos provedores. A definição final das bases legais e do prazo de retenção de cada registro permanece pendente de validação; não foi identificado um prazo automático de exclusão de pedidos.</p>
-    <p>O acesso a downloads depende da sessão autorizada, do status do pagamento e de uma autorização temporária assinada pelo Worker. Os arquivos digitais comerciais ficam em armazenamento privado. Essas medidas descrevem o código atual e não representam garantia de ausência de incidentes.</p>
+    <p>O acesso a downloads depende do status do pagamento e de uma autorização temporária. Links enviados por e-mail permitem acesso direto ao arquivo durante sua validade. Os arquivos digitais comerciais ficam em armazenamento privado.</p>
 
     <h2>Direitos da pessoa titular</h2>
     <p>É possível solicitar confirmação de tratamento, acesso, correção, informação sobre compartilhamento, anonimização, bloqueio ou eliminação quando cabíveis, além dos demais direitos previstos na legislação. A análise considera obrigações de conservação e outras hipóteses legais. Para exercer direitos ou fazer uma pergunta, use o <a href="/contato/">canal oficial de contato</a>.</p>

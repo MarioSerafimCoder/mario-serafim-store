@@ -10,6 +10,7 @@
   "compatibility_date": "2026-11-05",
   "main": "./worker/runtime.ts",
   "compatibility_flags": ["nodejs_compat"],
+  "triggers": { "crons": ["*/15 * * * *"] },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -20,6 +21,7 @@
   "vars": {
     "CHECKOUT_ENABLED": "true",
     "DYNAMIC_CATALOG": "true",
+    "EMAIL_DELIVERY_ENABLED": "false",
     "ADMIN_ACCESS_ISSUER": "https://wispy-hall-9782.cloudflareaccess.com",
     "ADMIN_ACCESS_AUD": "deb08711f50495f667abcf014262085c206a4c3ceefe5e39f1cdcb207fdde789",
     "MP_MODE": "production",
@@ -36,6 +38,7 @@
         "CHECKOUT_ENABLED": "false",
         "DYNAMIC_CATALOG": "true",
         "COUPONS_ENABLED": "true",
+        "EMAIL_DELIVERY_ENABLED": "false",
         "ADMIN_ACCESS_ISSUER": "https://wispy-hall-9782.cloudflareaccess.com",
         "ADMIN_ACCESS_AUD": "42189fa4211877b3e646914b03d9ef001b31d86c35aee1a69981d3d0fdca7d12",
         "MP_MODE": "test",

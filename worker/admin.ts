@@ -4,6 +4,8 @@ import { activity, customerHistory, customers, insights, reports, salesChart } f
 import { csv, orderColumns, orderFilters, orderRows, orderStatuses, productCategories, type OrderSummary } from './admin-orders.ts';
 import { accessConfigured, verifyAccess } from './access.ts';
 import { AdminError, audit, findProduct, httpsUrl, imageMime, productAction, publicImage, saveProduct } from './admin-data.ts';
+import { approvedDeliveryPurchase } from './index.ts';
+import { deliveryConfigured, deliveryEnabled, sendDelivery, type Delivery } from './email-delivery.ts';
 import { dashboard, editor, filePage, html, orderDetail, orderTable, page, productsTable, settingsPage, paymentLabel } from './admin-ui.ts';
 import { getSettings, skuPattern, statuses, versionPattern, type ProductRow, type Settings, type StoreDB } from './catalog.ts';
 import { richText } from './rich-text.ts';
@@ -78,6 +80,23 @@ async function write(request: Request, env: Env, db: StoreDB, actor: string, pat
     INSERT INTO admin_rate VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET hits=hits+1 WHERE hits<60 RETURNING hits
   `).bind(bucket).first();
   if (!limit) throw new AdminError('Muitas operações. Aguarde um minuto.', 429);
+  const resend = /^\/admin\/api\/entregas\/([a-f0-9-]+)\/reenviar$/.exec(path);
+  if (resend) {
+    if (!deliveryEnabled(env) || !deliveryConfigured(env)) throw new AdminError('Envio indisponível.',503);
+    const purchase = await approvedDeliveryPurchase(env,resend[1]);
+    if (!purchase) throw new AdminError('Pagamento não aprovado.',409);
+    const time = Math.floor(Date.now()/1000);
+    const [updated] = await db.batch([
+      db.prepare(`UPDATE email_deliveries SET state='pending',generation=generation+1,attempts=0,first_attempt=NULL,
+        next_attempt=?,accepted_at=NULL,provider_id=NULL,last_error=NULL
+        WHERE purchase_id=? AND state IN ('accepted','delivered','failed') AND generation<3
+        AND COALESCE(last_attempt,0)<=? RETURNING purchase_id`).bind(time,purchase,time-300),
+      audit(db,actor,'entrega.reenviada',purchase,true),
+    ]);
+    if (!updated.results.length) throw new AdminError('Reenvio indisponível ou limite atingido.',409);
+    await sendDelivery(env,purchase);
+    return new Response(null,{status:303,headers:{...privacy,location:'/admin/pedidos/'+resend[1]}});
+  }
   if (path === '/admin/api/imagens') {
     const bytes = await payload(request, 900 * 1024);
     const mime = imageMime(bytes);
@@ -232,7 +251,18 @@ async function adminPage(env: Env, db: StoreDB, url: URL, path: string) {
     if (order) {
       const events = await db.prepare('SELECT kind,status,recorded_at FROM order_events WHERE order_id=? ORDER BY id DESC LIMIT 100').bind(id)
         .all<{kind:string;status:string;recorded_at:number}>();
-      return ['Pedido',orderDetail(order,events.results,'/admin/pedidos' + (url.searchParams.has('voltar') ? '?' + new URLSearchParams(url.searchParams.get('voltar')!.slice(0,400)).toString() : '')),'/admin/pedidos'];
+      const delivery = deliveryEnabled(env) ? await db.prepare(`SELECT d.* FROM email_deliveries d JOIN orders o
+        ON d.purchase_id=COALESCE(o.cart_id,o.id) WHERE o.id=?`).bind(id).first<Delivery>() : null;
+      const stamp = (value: number | null) => value ? new Date(value*1000).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '—';
+      const labels: Record<string,string> = {pending:'Pendente',processing:'Processando',accepted:'Aceito pelo Resend',
+        delivered:'Entregue',failed:'Falha',blocked:'Bloqueado'};
+      const emailPanel = delivery ? `<section><h2>Entrega por e-mail</h2><dl>
+        <dt>E-mail informado</dt><dd>${html(delivery.email)}</dd><dt>Estado</dt><dd>${html(labels[delivery.state])}</dd>
+        <dt>Última tentativa</dt><dd>${stamp(delivery.last_attempt)}</dd><dt>Enviado ao provedor</dt><dd>${stamp(delivery.accepted_at)}</dd>
+        <dt>Tentativas</dt><dd>${delivery.attempts}</dd><dt>Último erro</dt><dd>${html(delivery.last_error ?? '—')}</dd></dl>
+        ${order.status==='approved' && ['accepted','delivered','failed'].includes(delivery.state) && delivery.generation<3
+          ? `<form method="post" action="/admin/api/entregas/${html(id)}/reenviar"><button>Reenviar produto por e-mail</button></form>` : ''}</section>` : '';
+      return ['Pedido',orderDetail(order,events.results,'/admin/pedidos' + (url.searchParams.has('voltar') ? '?' + new URLSearchParams(url.searchParams.get('voltar')!.slice(0,400)).toString() : '')) + emailPanel,'/admin/pedidos'];
     }
   }
   if (path === '/admin/descontos') return ['Descontos',await couponsPage(db,env.COUPONS_ENABLED==='true',env.CHECKOUT_ENABLED==='true',offset),path];

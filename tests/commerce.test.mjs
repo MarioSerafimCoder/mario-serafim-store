@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHmac, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import worker from '../worker/index.ts';
+import { purchaseLink } from '../worker/email-delivery.ts';
 
 const origin = 'https://store.example';
 const providerId = 'ORDTST01J49MMW3SSBK5PSV3DFR32959';
@@ -20,6 +21,7 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   db.exec(readFileSync(new URL('../migrations/0004_coupons.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../migrations/0005_cart_checkout.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../migrations/0006_commercial_identity.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0007_email_delivery.sql', import.meta.url), 'utf8'));
   db.prepare('INSERT INTO fulfillment VALUES (?, ?, ?, ?, 1)').run('REAL-1', '1', 'versioned/file.zip', 'produto.zip');
   const env = {
     ASSETS: { fetch: async () => Response.json([product, productTwo, { ...product, sku: 'DEMO-1' }]) },
@@ -36,6 +38,11 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
           },
         };
       },
+      async batch(statements) {
+        const results = [];
+        for (const statement of statements) results.push(await statement.run());
+        return results;
+      },
     },
     FILES: {
       head: async (key) => key === 'versioned/file.zip' ? {} : null,
@@ -44,13 +51,19 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
     CHECKOUT_ENABLED: 'true', MP_MODE: 'test', MP_SELLER_ID: '123', STORE_ORIGIN: origin,
     MP_ACCESS_TOKEN: 'fixture-not-a-token', MP_WEBHOOK_SECRET: signatureSecret,
     STORE_SESSION_SECRET: 'fixture-not-a-real-session-secret-32',
+    EMAIL_DELIVERY_ENABLED:'true',RESEND_API_KEY:'fixture',STORE_EMAIL_FROM:'store@example.com',
   };
 
   let createCalls = 0;
   let lookupCalls = 0;
   let failCreate = true;
   let remote;
+  const deliveries = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url === 'https://api.resend.com/emails') {
+      deliveries.push({key:options.headers['idempotency-key'],message:JSON.parse(options.body)});
+      return deliveries.length === 1 ? new Response('',{status:503}) : Response.json({id:'mail-fixture'});
+    }
     if (url === 'https://api.mercadopago.com/v1/orders') {
       createCalls++;
       const body = JSON.parse(options.body);
@@ -93,7 +106,7 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
     }), env);
   };
   const api = '/compras/api';
-  const start = (body = { sku: product.sku, code }) => call(api + '/checkout', { method: 'POST', body });
+  const start = (body = { sku: product.sku, code }) => call(api + '/checkout', { method: 'POST', body:{email:'Buyer@EXAMPLE.COM',...body} });
   const notify = (valid = true, stamp = Math.floor(Date.now() / 1000)) => {
     const requestId = 'fixture-webhook-request';
     const signed = `id:${providerId};request-id:${requestId};ts:${stamp};`;
@@ -107,6 +120,7 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   const orderCount = () => db.prepare('SELECT COUNT(*) AS n FROM orders').get().n;
 
   assert.equal((await start({ sku: product.sku, code, priceCents: 1 })).status, 400);
+  assert.equal((await start({ sku: product.sku, code, email:'bad@' })).status, 400);
   assert.equal((await start({ sku: 'MISSING', code })).status, 404);
   assert.equal((await start({ sku: 'DEMO-1', code })).status, 404);
   assert.equal((await start({ sku: product.sku, code })).status, 503);
@@ -132,6 +146,10 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   Object.assign(remote, { status: 'failed', status_detail: 'bad_filled_card_data', last_updated_date: '2026-11-06T10:02:00Z' });
   await notify();
   assert.equal((await state()).status, 'rejected');
+  Object.assign(remote, { status:'canceled', status_detail:'canceled', last_updated_date:'2026-11-06T10:02:30Z' });
+  await notify();
+  assert.equal((await state()).status,'canceled');
+  assert.equal(deliveries.length,0);
 
   Object.assign(remote, {
     status: 'processed', status_detail: 'accredited', total_paid_amount: '12.99',
@@ -147,6 +165,21 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   }
   await notify();
   await notify();
+  assert.equal(deliveries.length,1);
+  assert.equal(db.prepare('SELECT state FROM email_deliveries').get().state,'pending');
+  db.prepare('UPDATE email_deliveries SET next_attempt=0').run();
+  await worker.scheduled(null,env);
+  await notify();
+  assert.equal(deliveries.length,2);
+  assert.deepEqual(deliveries[0],deliveries[1]);
+  assert.deepEqual(deliveries[1].message.to,['Buyer@example.com']);
+  assert.equal(db.prepare('SELECT state FROM email_deliveries').get().state,'accepted');
+  const path = new URL(deliveries[1].message.text.match(/https:\/\/\S+\/compras\/api\/arquivo\/\S+/)[0]).pathname;
+  assert.equal(await (await call(path,{session:false})).text(),'ZIP');
+  assert.equal((await call(path.replace(order.id,randomUUID()),{session:false})).status,403);
+  const expires = Math.floor(Date.now()/1000)-1;
+  const expired = await purchaseLink(env.STORE_SESSION_SECRET,order.id,expires);
+  assert.equal((await call(api+'/arquivo/'+order.id+'/'+expires+'.'+expired,{session:false})).status,403);
   const approved = await state();
   assert.equal(approved.status, 'approved');
   assert.equal(approved.totalCents, 1299);
@@ -164,6 +197,8 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   assert.equal(await download.text(), 'ZIP');
 
   Object.assign(remote, { status: 'refunded', status_detail: 'refunded', last_updated_date: '2026-11-06T10:04:00Z' });
+  assert.equal((await call(path,{session:false})).status,403);
+  assert.equal(db.prepare('SELECT state FROM email_deliveries').get().state,'blocked');
   assert.equal((await call(api + '/download', { method: 'POST', body: file() })).status, 403);
   assert.equal((await state()).status, 'refunded');
   Object.assign(remote, { status: 'processed', status_detail: 'accredited', last_updated_date: '2026-11-06T10:03:00Z' });
@@ -181,6 +216,7 @@ test('carrinho valida todos os itens, cria uma única order e entrega cada arqui
   db.exec(readFileSync(new URL('../migrations/0004_coupons.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../migrations/0005_cart_checkout.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../migrations/0006_commercial_identity.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0007_email_delivery.sql', import.meta.url), 'utf8'));
   db.prepare('INSERT INTO fulfillment VALUES (?, ?, ?, ?, 1)').run(product.sku, product.version, 'real-1.zip', 'real-1.zip');
   db.prepare('INSERT INTO fulfillment VALUES (?, ?, ?, ?, 1)').run(productTwo.sku, productTwo.version, 'real-2.zip', 'real-2.zip');
   const env = {
@@ -204,14 +240,20 @@ test('carrinho valida todos os itens, cria uma única order e entrega cada arqui
         catch (failure) { db.exec('ROLLBACK'); throw failure; }
       },
     },
-    FILES: { head: async (key) => ['real-1.zip','real-2.zip'].includes(key) ? {} : null,
+    FILES: { head: async (key) => ['real-1.zip','real-2.zip'].includes(key) ? {size:key==='real-1.zip' ? key.length : 2_000_000} : null,
       get: async (key) => ['real-1.zip','real-2.zip'].includes(key) ? {body:new Response(key).body,size:key.length} : null },
     CHECKOUT_ENABLED:'true',MP_MODE:'test',MP_SELLER_ID:'123',STORE_ORIGIN:origin,
     MP_ACCESS_TOKEN:'fixture-not-a-token',MP_WEBHOOK_SECRET:signatureSecret,STORE_SESSION_SECRET:'fixture-not-a-real-session-secret-32',
+    EMAIL_DELIVERY_ENABLED:'true',RESEND_API_KEY:'fixture',STORE_EMAIL_FROM:'store@example.com',
   };
   const mpId = 'ORDTST01J49MMW3SSBK5PSV3DFR32960';
   let remote;
+  const deliveries = [];
   t.mock.method(globalThis,'fetch',async (url,options) => {
+    if (url === 'https://api.resend.com/emails') {
+      deliveries.push(JSON.parse(options.body));
+      return Response.json({id:'cart-mail-fixture'});
+    }
     if (url === 'https://api.mercadopago.com/v1/orders') {
       const body=JSON.parse(options.body);
       assert.equal(body.total_amount,'20.99');
@@ -230,7 +272,7 @@ test('carrinho valida todos os itens, cria uma única order e entrega cada arqui
     const form=body instanceof URLSearchParams;
     return worker.fetch(new Request(origin+path,{method,headers:{...(method==='POST'&&{origin}),...(session&&cookie&&{cookie}),
       ...(body&&!form&&{'content-type':'application/json'}),...(form&&{'content-type':'application/x-www-form-urlencoded'}),...headers},
-      body:form?body:body?JSON.stringify(body):undefined}),env);
+      body:form?body:body?JSON.stringify(path.endsWith('/checkout-carrinho') ? {email:'cart@example.com',...body} : body):undefined}),env);
   };
   const api='/compras/api';
   const code=randomUUID();
@@ -261,6 +303,10 @@ test('carrinho valida todos os itens, cria uma única order e entrega cada arqui
   Object.assign(remote,{status:'processed',status_detail:'accredited',total_paid_amount:'20.99',last_updated_date:'2026-11-06T10:01:00Z',
     transactions:{payments:[{id:'PAY01J67CQQH5904WDBVZEM4JMEP4',amount:'20.99',status:'processed',status_detail:'accredited'}]}});
   assert.equal((await notify()).status,200);
+  await notify();
+  assert.equal(deliveries.length,1);
+  assert.deepEqual(deliveries[0].attachments,[{filename:'real-1.zip',content:Buffer.from('real-1.zip').toString('base64')}]);
+  assert.equal((deliveries[0].text.match(/\/compras\/api\/arquivo\//g) ?? []).length,1);
   const approved=await (await call(api+'/pedido')).json();
   assert.equal(approved.status,'approved');
   assert.ok(approved.items.every((item)=>item.grant));

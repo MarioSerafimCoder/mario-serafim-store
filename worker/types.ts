@@ -26,6 +26,11 @@ export interface Env {
   MP_ACCESS_TOKEN?: string;
   MP_WEBHOOK_SECRET?: string;
   STORE_SESSION_SECRET?: string;
+  EMAIL_DELIVERY_ENABLED?: string;
+  RESEND_API_KEY?: string;
+  STORE_EMAIL_FROM?: string;
+  EMAIL_LINK_TTL_SECONDS?: string;
+  EMAIL_ATTACHMENT_MAX_BYTES?: string;
 }
 
 export interface Product {
