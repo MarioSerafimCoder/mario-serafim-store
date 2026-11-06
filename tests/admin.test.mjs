@@ -203,6 +203,7 @@ test('admin reenvia entrega apenas após confirmar pagamento aprovado no Mercado
   const env = { DB:binding, STORE_ORIGIN:origin, ADMIN_ACCESS_ISSUER:issuer, ADMIN_ACCESS_AUD:audience,
     ADMIN_EMAIL:owner, MP_MODE:'test', MP_SELLER_ID:'10', MP_ACCESS_TOKEN:'fixture', STORE_SESSION_SECRET:'fixture-not-a-real-session-secret-32',
     EMAIL_DELIVERY_ENABLED:'true', RESEND_API_KEY:'fixture', STORE_EMAIL_FROM:'store@example.test',
+    EMAIL_DELIVERY_QUEUE:{send:async()=>{}},
     FILES:{head:async()=>({}),get:async()=>null} };
   raw.prepare(`INSERT INTO orders(id,recovery_hash,sku,title,price_cents,currency,object_key,filename,mode,seller,status,
       remote_id,created_at,provider_updated,buyer_email)

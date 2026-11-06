@@ -2,7 +2,7 @@ import { createRemoteOrder, getRemoteOrder, hex, hmacKey, paymentState, validPro
 import type { CartLine, CheckoutCart, Env, Order, Product } from './types.ts';
 import { couponDiscount, couponPattern, eligibleCoupon, minimumCharged } from './coupons.ts';
 import { catalogOffer } from './catalog.ts';
-import { blockDelivery, deliveryAddress, deliveryConfigured, deliveryEnabled, registerDelivery, safeFilename, sendDelivery } from './email-delivery.ts';
+import { blockDelivery, deliveryAddress, deliveryConfigured, deliveryEnabled, dispatchDelivery, registerDelivery, safeFilename, sendDelivery } from './email-delivery.ts';
 
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const skuPattern = /^[A-Z0-9]+(?:-[A-Z0-9]+)*$/;
@@ -376,7 +376,7 @@ async function checkoutCart(request: Request, env: Ready) {
 
 async function afterPayment(env: Ready, id: string, status: string, dispatch: boolean) {
   if (status === 'refunded' || status === 'disputed') await blockDelivery(env,id);
-  if (status === 'approved' && dispatch) await sendDelivery(env,id);
+  if (status === 'approved' && dispatch) await dispatchDelivery(env,id);
 }
 
 async function reconcile(env: Ready, order: Order, remoteId: string, dispatch = true) {
@@ -646,6 +646,42 @@ export default {
             if (order?.remote_id) await reconcile(env,order,order.remote_id);
           }
         } catch { console.error('Retentativa de entrega incompleta'); }
+      }
+    }
+  },
+
+  async queue(batch: { messages: { body: unknown; ack(): void; retry(options?: { delaySeconds: number }): void }[] }, env: Env) {
+    if (!ready(env)) {
+      for (const message of batch.messages) message.retry({delaySeconds:300});
+      return;
+    }
+    for (const message of batch.messages) {
+      if (!deliveryEnabled(env)) { message.ack(); continue; }
+      if (!deliveryConfigured(env)) { message.retry({delaySeconds:300}); continue; }
+      try {
+        const id = message.body && typeof message.body === 'object' && 'purchase_id' in message.body
+          ? (message.body as {purchase_id?:unknown}).purchase_id : null;
+        if (typeof id !== 'string' || !uuid.test(id)) { message.ack(); continue; }
+        const cart = await findCart(env,id);
+        let approved = false;
+        if (cart?.remote_id) {
+          approved = await reconcileCart(env,cart,cart.remote_id,false) && (await findCart(env,id))?.status === 'approved';
+        } else {
+          const order = await findOrder(env,id);
+          if (order?.remote_id) approved = await reconcile(env,order,order.remote_id,false) &&
+            (await findOrder(env,id))?.status === 'approved';
+        }
+        if (!approved) { message.ack(); continue; }
+        const delay = await sendDelivery(env,id);
+        if (delay) message.retry({delaySeconds:delay});
+        else {
+          const pending = await env.DB.prepare(`SELECT next_attempt FROM email_deliveries
+            WHERE purchase_id=? AND state='pending'`).bind(id).first<{next_attempt:number}>();
+          if (pending) message.retry({delaySeconds:Math.max(1,pending.next_attempt-now())});
+          else message.ack();
+        }
+      } catch {
+        message.retry({delaySeconds:300});
       }
     }
   },

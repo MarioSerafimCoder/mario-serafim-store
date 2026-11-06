@@ -5,12 +5,15 @@
   "preview_urls": false,
   "routes": [{ "pattern": "loja.marioserafim.com.br", "custom_domain": true }],
   "version_metadata": { "binding": "RELEASE" },
+  "queues": {
+    "producers": [{ "binding": "EMAIL_DELIVERY_QUEUE", "queue": "mario-serafim-store-email-delivery" }],
+    "consumers": [{ "queue": "mario-serafim-store-email-delivery", "max_batch_size": 1, "max_retries": 10, "retry_delay": 300 }]
+  },
   "d1_databases": [{ "binding": "DB", "database_name": "mario-serafim-store-producao", "database_id": "06065665-4d3e-439a-8230-505af060ad3c" }],
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "mario-serafim-store-arquivos-producao" }],
   "compatibility_date": "2026-11-05",
   "main": "./worker/runtime.ts",
   "compatibility_flags": ["nodejs_compat"],
-  "triggers": { "crons": ["*/15 * * * *"] },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

@@ -23,6 +23,7 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   db.exec(readFileSync(new URL('../migrations/0006_commercial_identity.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../migrations/0007_email_delivery.sql', import.meta.url), 'utf8'));
   db.prepare('INSERT INTO fulfillment VALUES (?, ?, ?, ?, 1)').run('REAL-1', '1', 'versioned/file.zip', 'produto.zip');
+  const queued = [];
   const env = {
     ASSETS: { fetch: async () => Response.json([product, productTwo, { ...product, sku: 'DEMO-1' }]) },
     DB: {
@@ -52,6 +53,7 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
     MP_ACCESS_TOKEN: 'fixture-not-a-token', MP_WEBHOOK_SECRET: signatureSecret,
     STORE_SESSION_SECRET: 'fixture-not-a-real-session-secret-32',
     EMAIL_DELIVERY_ENABLED:'true',RESEND_API_KEY:'fixture',STORE_EMAIL_FROM:'store@example.com',
+    EMAIL_DELIVERY_QUEUE:{send:async(message,options)=>queued.push({message,options})},
   };
 
   let createCalls = 0;
@@ -168,7 +170,16 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   assert.equal(deliveries.length,1);
   assert.equal(db.prepare('SELECT state FROM email_deliveries').get().state,'pending');
   db.prepare('UPDATE email_deliveries SET next_attempt=0').run();
-  await worker.scheduled(null,env);
+  const queuedRetry=queued.shift();
+  assert.deepEqual(queuedRetry.message,{purchase_id:order.id});
+  assert.equal(queuedRetry.options.delaySeconds,120);
+  let acknowledged=false;
+  await worker.queue({messages:[{body:queuedRetry.message,ack(){acknowledged=true;},retry(){assert.fail('não deve reagendar uma entrega aceita');}}]},env);
+  assert.equal(acknowledged,true);
+  const duplicateQueueMessage=queued.shift();
+  let duplicateAcknowledged=false;
+  await worker.queue({messages:[{body:duplicateQueueMessage.message,ack(){duplicateAcknowledged=true;},retry(){assert.fail('a mensagem duplicada deve ser confirmada');}}]},env);
+  assert.equal(duplicateAcknowledged,true);
   await notify();
   assert.equal(deliveries.length,2);
   assert.deepEqual(deliveries[0],deliveries[1]);
@@ -245,6 +256,7 @@ test('carrinho valida todos os itens, cria uma única order e entrega cada arqui
     CHECKOUT_ENABLED:'true',MP_MODE:'test',MP_SELLER_ID:'123',STORE_ORIGIN:origin,
     MP_ACCESS_TOKEN:'fixture-not-a-token',MP_WEBHOOK_SECRET:signatureSecret,STORE_SESSION_SECRET:'fixture-not-a-real-session-secret-32',
     EMAIL_DELIVERY_ENABLED:'true',RESEND_API_KEY:'fixture',STORE_EMAIL_FROM:'store@example.com',
+    EMAIL_DELIVERY_QUEUE:{send:async()=>{}},
   };
   const mpId = 'ORDTST01J49MMW3SSBK5PSV3DFR32960';
   let remote;

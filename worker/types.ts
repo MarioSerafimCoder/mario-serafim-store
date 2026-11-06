@@ -27,6 +27,7 @@ export interface Env {
   MP_WEBHOOK_SECRET?: string;
   STORE_SESSION_SECRET?: string;
   EMAIL_DELIVERY_ENABLED?: string;
+  EMAIL_DELIVERY_QUEUE?: { send(message: { purchase_id: string }, options?: { delaySeconds: number }): Promise<void> };
   RESEND_API_KEY?: string;
   STORE_EMAIL_FROM?: string;
   EMAIL_LINK_TTL_SECONDS?: string;

@@ -2,7 +2,7 @@ import { hex, hmacKey } from './mercado-pago.ts';
 import type { Env, Order } from './types.ts';
 
 export const deliveryEnabled = (env: Env) => env.EMAIL_DELIVERY_ENABLED === 'true';
-export const deliveryConfigured = (env: Env) => Boolean(env.RESEND_API_KEY && env.STORE_EMAIL_FROM && env.FILES);
+export const deliveryConfigured = (env: Env) => Boolean(env.RESEND_API_KEY && env.STORE_EMAIL_FROM && env.FILES && env.EMAIL_DELIVERY_QUEUE);
 const clock = () => Math.floor(Date.now() / 1000);
 const escape = (value: string) => value.replace(/[&<>"']/g, ch =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
@@ -90,8 +90,8 @@ async function message(env: Env, delivery: Delivery, items: Order[]) {
 const approved = `(EXISTS(SELECT 1 FROM orders o WHERE o.id=email_deliveries.purchase_id AND o.cart_id IS NULL AND o.status='approved')
   OR EXISTS(SELECT 1 FROM checkout_carts c WHERE c.id=email_deliveries.purchase_id AND c.status='approved'))`;
 
-export async function sendDelivery(env: Env, id: string) {
-  if (!deliveryEnabled(env) || !deliveryConfigured(env) || !env.DB) return;
+export async function sendDelivery(env: Env, id: string): Promise<number | null> {
+  if (!deliveryEnabled(env) || !deliveryConfigured(env) || !env.DB) return null;
   const db = env.DB;
   const time = clock();
   await db.prepare(`UPDATE email_deliveries SET state='failed',last_error='Limite de retentativas atingido'
@@ -101,7 +101,7 @@ export async function sendDelivery(env: Env, id: string) {
     first_attempt=COALESCE(first_attempt,?),last_attempt=?,next_attempt=?
     WHERE purchase_id=? AND state IN ('pending','processing') AND next_attempt<=? AND ${approved} RETURNING *`)
     .bind(time,time,time+300,id,time).first<Delivery>();
-  if (!job) return;
+  if (!job) return null;
   const update = (state: string, next: number, issue: string | null, provider: string | null = null) =>
     db.prepare(`UPDATE email_deliveries SET state=?,next_attempt=?,last_error=?,provider_id=?,accepted_at=?
       WHERE purchase_id=? AND generation=? AND attempts=? AND state='processing'`)
@@ -109,11 +109,11 @@ export async function sendDelivery(env: Env, id: string) {
   try {
     const { results: items } = await db.prepare(`SELECT * FROM orders WHERE status='approved' AND
       ((id=? AND cart_id IS NULL) OR cart_id=?) ORDER BY cart_position,id`).bind(id,id).all<Order>();
-    if (!items.length) { await update('blocked',0,'Pagamento não aprovado'); return; }
+    if (!items.length) { await update('blocked',0,'Pagamento não aprovado'); return null; }
     const payload = await message(env,job,items);
     // Check again after reading attachments, immediately before the external call.
     if (!await db.prepare(`SELECT 1 FROM email_deliveries WHERE purchase_id=? AND state='processing'
-      AND generation=? AND attempts=? AND ${approved}`).bind(id,job.generation,job.attempts).first()) return;
+      AND generation=? AND attempts=? AND ${approved}`).bind(id,job.generation,job.attempts).first()) return null;
     const response = await fetch('https://api.resend.com/emails', {
       method:'POST', redirect:'error', signal:AbortSignal.timeout(10_000),
       headers: { authorization:`Bearer ${env.RESEND_API_KEY}`, 'content-type':'application/json',
@@ -123,15 +123,31 @@ export async function sendDelivery(env: Env, id: string) {
     if (!response.ok) {
       const retry = [408,409,429].includes(response.status) || response.status >= 500;
       await response.body?.cancel();
-      await update(retry ? 'pending' : 'failed',clock()+Math.min(3600,60*2**job.attempts),`Resend HTTP ${response.status}`);
-      return;
+      const delay = Math.min(3600,60*2**job.attempts);
+      await update(retry ? 'pending' : 'failed',clock()+delay,`Resend HTTP ${response.status}`);
+      return retry ? delay : null;
     }
     const result = await response.json() as {id?:string};
     if (typeof result.id !== 'string' || !/^[\w-]{1,100}$/.test(result.id)) throw new Error('Resposta inesperada');
     await update('accepted',0,null,result.id);
+    return null;
   } catch {
-    await update('pending',clock()+Math.min(3600,60*2**job.attempts),'Falha temporária de preparação ou envio');
+    const delay = Math.min(3600,60*2**job.attempts);
+    await update('pending',clock()+delay,'Falha temporária de preparação ou envio');
+    return delay;
   }
+}
+
+export async function dispatchDelivery(env: Env, id: string) {
+  const delay = await sendDelivery(env,id);
+  if (delay) {
+    await env.EMAIL_DELIVERY_QUEUE!.send({purchase_id:id},{delaySeconds:delay});
+    return;
+  }
+  const pending = await env.DB?.prepare(`SELECT state,next_attempt FROM email_deliveries
+    WHERE purchase_id=? AND state IN ('pending','processing')`).bind(id).first<{state:string;next_attempt:number}>();
+  if (pending) await env.EMAIL_DELIVERY_QUEUE!.send({purchase_id:id},
+    {delaySeconds:Math.max(1,pending.next_attempt-clock())});
 }
 
 export async function blockDelivery(env: Env, id: string) {
