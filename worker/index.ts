@@ -25,7 +25,7 @@ function ready(env: Env): env is Ready {
     (env.MP_MODE === 'test' || env.MP_MODE === 'production'));
 }
 
-async function readBody(request: Request, form = false): Promise<Record<string, unknown> | null> {
+export async function readBody(request: Request, form = false): Promise<Record<string, unknown> | null> {
   const contentType = form ? 'application/x-www-form-urlencoded' : 'application/json';
   if (request.headers.get('content-type')?.split(';')[0] !== contentType || !request.body) return null;
   const reader = request.body.getReader();

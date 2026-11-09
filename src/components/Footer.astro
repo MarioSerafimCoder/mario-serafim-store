@@ -23,7 +23,6 @@ const officialContact = site.officialContact;
     <nav aria-label="Ajuda">
       <h2>Ajuda</h2>
       {site.footer.help.map((item) => <a href={item.href} class="tap">{item.label}</a>)}
-      <a href={storeSupport.whatsapp} class="tap">WhatsApp <span aria-hidden="true">↗</span></a>
       <a href={`mailto:${storeSupport.email}`} class="tap footer-email">{storeSupport.email}</a>
     </nav>
     <nav aria-label="Informações legais">

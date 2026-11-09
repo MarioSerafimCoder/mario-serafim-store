@@ -1,49 +1,222 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { helpTopics } from '../config/help-topics';
 import { storeSupport } from '../config/site';
 ---
 
-<BaseLayout title="Contato e suporte">
+<BaseLayout title="Central de Ajuda">
   <section class="store-hero" aria-labelledby="contact-title">
     <div>
-      <p class="eyebrow"><span class="signal" aria-hidden="true"></span> Atendimento da loja</p>
-      <h1 class="display" id="contact-title">Contato e suporte</h1>
-      <p class="lede">Fale com a loja sobre produtos, pagamentos, downloads e licenças.</p>
+      <p class="eyebrow"><span class="signal" aria-hidden="true"></span> Central de Ajuda</p>
+      <h1 class="display" id="contact-title">Como podemos ajudar?</h1>
+      <p class="lede">Selecione o assunto para encontrarmos a melhor solução.</p>
     </div>
   </section>
 
-  <section class="contact-channels" aria-label="Canais de atendimento">
-    <article class="contact-card">
-      <h2>WhatsApp</h2>
-      <p>Converse com o suporte da loja.</p>
-      <p class="contact-detail">{storeSupport.phone}</p>
-      <a class="action" href={storeSupport.whatsapp}>Chamar no WhatsApp <span aria-hidden="true">↗</span></a>
-    </article>
-    <article class="contact-card">
-      <h2>E-mail</h2>
-      <p>Escreva para o suporte com os detalhes da sua dúvida.</p>
-      <p class="contact-detail">{storeSupport.email}</p>
-      <a class="action" href={`mailto:${storeSupport.email}`}>Enviar e-mail <span aria-hidden="true">↗</span></a>
-    </article>
-  </section>
+  <div class="help-flow" id="help-flow" hidden>
+    <nav class="help-nav" aria-label="Etapas do atendimento" hidden>
+      <button type="button" class="text-link tap" data-back>← Voltar</button>
+      <button type="button" class="text-link tap" data-reset>Alterar assunto</button>
+    </nav>
 
-  <section class="contact-card contact-order" aria-labelledby="order-help">
-    <div>
-      <h2 id="order-help">Já fez uma compra?</h2>
-      <p>Consulte o pagamento e acesse seus arquivos na página de pedidos. Se precisar de ajuda, informe o número do pedido ao suporte.</p>
-    </div>
-    <a class="text-link tap" href="/compras/">Consultar meus pedidos <span aria-hidden="true">→</span></a>
-  </section>
+    <section data-step="topics" aria-labelledby="help-topics">
+      <h2 id="help-topics" tabindex="-1">Escolha um assunto</h2>
+      <div class="help-topics">
+        {helpTopics.map((topic, index) => (
+          <button type="button" class="help-choice" data-topic={topic.id}>
+            <span class="help-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+            <span>{topic.title}</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+          </button>
+        ))}
+      </div>
+    </section>
+
+    <section data-step="issues" hidden aria-labelledby="help-issues">
+      <h2 id="help-issues" tabindex="-1">Escolha a sua dúvida</h2>
+      <p class="help-muted" data-topic-label></p>
+      <div class="help-issues" data-issues></div>
+    </section>
+
+    <section data-step="guidance" class="help-panel" hidden aria-labelledby="help-guidance">
+      <h2 id="help-guidance" tabindex="-1"></h2>
+      <p class="help-muted" data-guidance></p>
+      <a class="text-link tap" data-resource hidden></a>
+      <div class="help-resolution">
+        <p><strong>Essa orientação resolveu sua dúvida?</strong></p>
+        <div class="help-actions">
+          <button class="help-secondary" type="button" data-resolved>Sim, resolveu</button>
+          <button class="action" type="button" data-escalate>Ainda preciso de ajuda</button>
+        </div>
+      </div>
+    </section>
+
+    <section data-step="form" class="help-panel" hidden aria-labelledby="help-form-title">
+      <h2 id="help-form-title" tabindex="-1">Enviar solicitação</h2>
+      <p class="help-muted" data-context></p>
+      <form class="help-form">
+        <label>E-mail para resposta<input type="email" name="email" autocomplete="email" required maxlength="254"></label>
+        <label data-order hidden>Número do pedido (opcional)<input name="order" maxlength="64" pattern="[A-Za-z0-9\-]{1,64}"></label>
+        <label>Descreva o problema<textarea name="description" rows="5" minlength="10" maxlength="900" required aria-describedby="help-description"></textarea></label>
+        <p class="help-muted" id="help-description">Inclua apenas os detalhes necessários. Evite senhas, dados bancários e códigos de recuperação.</p>
+        <div hidden aria-hidden="true"><label>Site<input name="website" tabindex="-1" autocomplete="off"></label></div>
+        <button class="action" type="submit">Enviar solicitação</button>
+        <p data-feedback role="status" aria-live="polite"></p>
+      </form>
+      <p class="help-muted">Também é possível escrever para <a class="text-link" href={`mailto:${storeSupport.email}`}>{storeSupport.email}</a>.</p>
+      <details class="help-urgent" hidden>
+        <summary>Preciso de atendimento imediato</summary>
+        <p class="help-muted">Use este canal se a falha de acesso persistir ou exigir atendimento imediato.</p>
+        <a class="text-link tap" href={storeSupport.whatsapp}>Falar com o suporte pelo WhatsApp</a>
+      </details>
+    </section>
+
+    <section data-step="done" class="help-panel" hidden aria-labelledby="help-done">
+      <h2 id="help-done" tabindex="-1"></h2>
+      <p class="help-muted" data-result></p>
+    </section>
+  </div>
+
+  <noscript>
+    <p>Você pode consultar seus <a class="text-link" href="/compras/">pedidos</a> ou enviar um e-mail para <a class="text-link" href={`mailto:${storeSupport.email}`}>{storeSupport.email}</a>.</p>
+  </noscript>
 </BaseLayout>
 
+<script>
+  import { helpTopics } from '../config/help-topics';
+
+  const flow = document.querySelector<HTMLElement>('#help-flow')!;
+  const element = <T extends HTMLElement>(selector: string) => flow.querySelector<T>(selector)!;
+  const steps = [...flow.querySelectorAll<HTMLElement>('[data-step]')];
+  const navigation = element('nav');
+  const form = element<HTMLFormElement>('form');
+  const feedback = element('[data-feedback]');
+  const orderField = element('[data-order]');
+  const orderInput = form.elements.namedItem('order') as HTMLInputElement;
+  const submit = element<HTMLButtonElement>('[type="submit"]');
+  let topic: (typeof helpTopics)[number];
+  let issue: (typeof helpTopics)[number]['issues'][number];
+  let current = 'topics';
+  let sending = false;
+
+  function show(step: string) {
+    current = step;
+    navigation.hidden = step === 'topics';
+    element('[data-back]').hidden = step === 'done';
+    for (const panel of steps) {
+      panel.hidden = panel.dataset.step !== step;
+      if (!panel.hidden) panel.querySelector('h2')?.focus();
+    }
+  }
+
+  function finish(title: string, message: string) {
+    element('#help-done').textContent = title;
+    element('[data-result]').textContent = message;
+    show('done');
+  }
+
+  for (const item of helpTopics) {
+    element(`[data-topic="${item.id}"]`).addEventListener('click', () => {
+      topic = item;
+      element('[data-topic-label]').textContent = item.title;
+      element('[data-issues]').replaceChildren(...item.issues.map(choice => {
+        const button = document.createElement('button');
+        button.className = 'help-choice';
+        button.type = 'button';
+        button.textContent = choice.title;
+        button.addEventListener('click', () => {
+          issue = choice;
+          element('#help-guidance').textContent = choice.title;
+          element('[data-guidance]').textContent = choice.guidance;
+          const resource = element<HTMLAnchorElement>('[data-resource]');
+          resource.hidden = !choice.link;
+          resource.href = choice.link ?? '';
+          resource.textContent = choice.label ?? '';
+          show('guidance');
+        });
+        return button;
+      }));
+      show('issues');
+    });
+  }
+
+  element('[data-back]').addEventListener('click', () => {
+    if (!sending) show(current === 'form' ? 'guidance' : current === 'guidance' ? 'issues' : 'topics');
+  });
+  element('[data-reset]').addEventListener('click', () => { if (!sending) show('topics'); });
+  element('[data-resolved]').addEventListener('click', () =>
+    finish('Orientação concluída', 'Se precisar de ajuda com outro assunto, selecione Alterar assunto.'));
+  element('[data-escalate]').addEventListener('click', () => {
+    element('[data-context]').textContent = `${topic.title} · ${issue.title}`;
+    orderField.hidden = !(topic.order || issue.order);
+    orderInput.disabled = orderField.hidden;
+    element('.help-urgent').hidden = !issue.urgent;
+    element<HTMLDetailsElement>('.help-urgent').open = false;
+    feedback.textContent = '';
+    show('form');
+  });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (sending) return;
+    const data = Object.fromEntries(new FormData(form));
+    sending = submit.disabled = true;
+    element<HTMLButtonElement>('[data-back]').disabled = true;
+    element<HTMLButtonElement>('[data-reset]').disabled = true;
+    feedback.textContent = 'Enviando sua solicitação…';
+    try {
+      const result = await fetch('/contato/api/suporte', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...data, topic: topic.id, issue: issue.id }),
+      });
+      const { message } = await result.json() as { message?: string };
+      if (!result.ok || !message) {
+        feedback.textContent = message ?? 'Tente novamente ou escreva para o e-mail de suporte.';
+        return;
+      }
+      form.reset();
+      finish('Solicitação enviada', message);
+    } catch {
+      feedback.textContent = 'Não foi possível confirmar o envio. Tente novamente ou escreva para o e-mail de suporte.';
+    } finally {
+      sending = submit.disabled = false;
+      element<HTMLButtonElement>('[data-back]').disabled = false;
+      element<HTMLButtonElement>('[data-reset]').disabled = false;
+    }
+  });
+
+  flow.hidden = false;
+</script>
+
 <style>
-  .contact-channels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-block: clamp(1.25rem, 3vw, 2rem); }
-  .contact-card { display: grid; align-content: start; justify-items: start; gap: .65rem; min-width: 0; padding: clamp(1.15rem, 3vw, 1.8rem); background: var(--surface); border: 1px solid var(--line); border-radius: .85rem; }
-  .contact-card h2 { font-size: 1.25rem; font-weight: 650; line-height: 1.25; }
-  .contact-card p { max-width: 60ch; color: var(--muted); }
-  .contact-card .contact-detail { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
-  .contact-card .action { margin-top: .35rem; }
-  .contact-order { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1.5rem; }
-  .contact-order h2 { margin-bottom: .4rem; }
-  @media (max-width: 42rem) { .contact-channels { grid-template-columns: minmax(0, 1fr); } }
+  .help-flow { max-width: 68rem; margin-block: clamp(1.25rem, 4vw, 2.5rem); }
+  .help-flow h2 { margin-bottom: .65rem; font-size: clamp(1.15rem, 3vw, 1.55rem); font-weight: 650; line-height: 1.2; }
+  .help-nav, .help-actions { display: flex; flex-wrap: wrap; gap: .55rem 1.2rem; margin-bottom: .85rem; }
+  .help-topics, .help-issues { display: grid; gap: .75rem; margin-top: 1rem; }
+  .help-topics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .help-choice, .help-panel, .help-secondary { border: 1px solid var(--line); border-radius: .75rem; background: var(--surface); }
+  .help-choice { display: flex; align-items: center; gap: .85rem; width: 100%; min-height: 3.5rem; padding: 1rem; font-weight: 600; text-align: left; cursor: pointer; }
+  .help-choice:hover, .help-secondary:hover { border-color: var(--accent); }
+  .help-choice svg { flex: none; margin-left: auto; color: var(--accent); }
+  .help-number { color: var(--accent); font-size: .875rem; font-variant-numeric: tabular-nums; }
+  .help-panel { padding: clamp(1rem, 4vw, 2rem); }
+  .help-muted { max-width: 65ch; color: var(--muted); overflow-wrap: anywhere; }
+  .help-resolution, .help-urgent { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .help-actions { margin-top: .65rem; margin-bottom: 0; }
+  .help-secondary { min-height: 3rem; padding: .65rem 1rem; font-weight: 600; }
+  .help-flow button { cursor: pointer; }
+  .help-flow button:disabled { opacity: .55; cursor: wait; }
+  .help-form { display: grid; justify-items: start; gap: .8rem; margin-block: 1.15rem; }
+  .help-form label { display: grid; gap: .35rem; width: min(100%, 36rem); font-weight: 600; }
+  .help-form input, .help-form textarea { width: 100%; padding: .7rem; border: 1px solid var(--muted); border-radius: .45rem; background: var(--color-paper); color: var(--ink); font-weight: 400; }
+  .help-form textarea { resize: vertical; }
+  .help-form p:empty { margin: 0; display: none; }
+  .help-urgent summary { width: fit-content; cursor: pointer; font-weight: 600; }
+  .help-flow [hidden] { display: none; }
+  @media (max-width: 40rem) { .help-topics { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: no-preference) {
+    .help-flow [data-step]:not([hidden]) { animation: help-in .16s ease-out; }
+    @keyframes help-in { from { opacity: .65; } to { opacity: 1; } }
+  }
 </style>

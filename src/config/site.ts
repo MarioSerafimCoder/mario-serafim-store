@@ -22,7 +22,7 @@ export const site = {
       { label: 'Portfólio', href: 'https://marioserafim.com.br', external: true },
     ],
     help: [
-      { label: 'Contato', href: '/contato/' },
+      { label: 'Central de Ajuda', href: '/contato/' },
       { label: 'Entrega digital e dúvidas', href: '/entrega-digital/' },
       { label: 'Cancelamentos e reembolsos', href: '/reembolsos/' },
     ],

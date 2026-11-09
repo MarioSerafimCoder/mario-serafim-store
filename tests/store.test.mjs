@@ -89,7 +89,8 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
     const withoutLayoutScripts = html.replace(/<script id="store-theme">[\s\S]*?<\/script>/, '')
       .replace(/<script type="module" src="\/_astro\/Header\.astro_[^"]+"><\/script>/, '')
       .replace(/<script type="module">[^<]*store-cookie-notice-v1[^<]*<\/script>/, '');
-    assert.doesNotMatch(withoutLayoutScripts, /<script\b|<form\b|data-add-to-cart|isle.thorne|newsletter/i);
+    if (page !== 'contato/index.html') assert.doesNotMatch(withoutLayoutScripts, /<script\b|<form\b/i);
+    assert.doesNotMatch(withoutLayoutScripts, /data-add-to-cart|isle.thorne|newsletter/i);
   }
   const cart = await read('carrinho/index.html');
   assert.match(cart, /name="robots" content="noindex"/);
@@ -100,9 +101,11 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
     assert.match(await read(page), /name="robots" content="noindex"/);
   }
   const contact = await read('contato/index.html');
-  assert.match(contact, /href="https:\/\/wa\.me\/5585981866552\?text=ol%C3%A1%20quero%20ajuda%20com%20o%20meu%20produto"/);
   assert.match(contact, /href="mailto:contato@marioserafim\.com\.br"/);
-  assert.match(contact, /href="\/compras\/"[^>]*>Consultar meus pedidos/);
+  assert.match(contact, /Como podemos ajudar\?/);
+  assert.equal([...contact.matchAll(/ data-topic="/g)].length, 4);
+  assert.match(contact, /<details class="help-urgent" hidden/);
+  assert.doesNotMatch(await read('index.html'), /https:\/\/wa\.me\//);
   assert.match(await read('entrega-digital/index.html'), /Como recebo meu produto\?/);
   assert.match(await read('entrega-digital/index.html'), /Posso usar o produto em projetos comerciais/);
   assert.match(await read('reembolsos/index.html'), /sete dias/);

@@ -2,6 +2,7 @@ import { handle } from '@astrojs/cloudflare/handler';
 import commerce from './index.ts';
 import { admin, isAdminPath } from './admin.ts';
 import { publicImage } from './admin-data.ts';
+import { submitSupport } from './support.ts';
 import type { Env } from './types.ts';
 
 type Context = Parameters<typeof handle>[2];
@@ -43,6 +44,7 @@ export default {
   async fetch(request: Request, env: Env, context: Context) {
     const url = new URL(request.url);
     const path = url.pathname;
+    if (path === '/contato/api/suporte') return submitSupport(request, env);
     const render = () => handle(request, env, context);
     if (isAdminPath(path)) return admin(request,env,render);
     if (path.startsWith('/compras/api/') || path.startsWith('/compras/retorno/')) return commerce.fetch(request,env);
