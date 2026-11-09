@@ -13,7 +13,7 @@ export function page(title: string, content: string, active: string, logout: str
   <meta name="robots" content="noindex,nofollow"><title>${html(title)} · Mário Serafim Store</title>
   <link rel="stylesheet" href="/admin-ui.css"><script defer src="/admin-ui.js"></script></head>
   <body><a href="#main" class="skip">Pular para o conteúdo</a><header class="topbar">
-  <a class="brand" href="/admin"><img src="/marca/monograma.png" width="30" height="30" alt=""><span>Mário Serafim <strong>Store</strong></span></a>
+  <a class="brand" href="/admin"><img src="/marca/logo-email.png" width="180" height="23" alt="Mário Serafim Store"></a>
   <form action="/admin/produtos" method="get" role="search"><label class="sr-only" for="top-search">Buscar produtos</label>
   <input id="top-search" type="search" name="q" maxlength="80" placeholder="Buscar produtos por nome ou SKU"><button type="submit">Buscar</button></form>
   <span class="top-account">Administração</span></header>${navigation(active,logout)}

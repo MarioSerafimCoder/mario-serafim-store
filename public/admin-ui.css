@@ -3,8 +3,8 @@
 body{margin:0;min-height:100vh;background:#f4f4f4;--accent:#b2231b;--line:#dedede;--muted:#595959}
 a{color:var(--accent);text-underline-offset:.22em}
 .topbar{position:fixed;z-index:3;inset:0 0 auto;display:grid;grid-template-columns:14rem minmax(12rem,48rem) 1fr;align-items:center;gap:1.1rem;min-height:3.65rem;background:#151515;color:#fff;padding:.5rem 1rem}
-.brand{display:flex;align-items:center;gap:.55rem;color:white;text-decoration:none;font-size:.93rem;white-space:nowrap}
-.brand img{background:#fff;border-radius:.3rem}
+.brand{display:flex;align-items:center;justify-self:start}
+.brand img{display:block;max-width:100%;height:auto}
 .topbar form{display:flex;align-items:center;gap:.35rem}
 .topbar input,.topbar button{background:#303030;color:white;border-color:#545454;min-height:2.5rem}
 .topbar input::placeholder{color:#ddd}
