@@ -2,10 +2,17 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { helpTopics } from '../config/help-topics';
 import { storeSupport } from '../config/site';
+
+const icons: Record<string, string> = {
+  compra: 'M5 8h14l1 12H4L5 8Zm4 1V6a3 3 0 0 1 6 0v3',
+  produto: 'm12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Zm-8 4.5 8 4.5 8-4.5M12 12v9',
+  licencas: 'M6 3h8l4 4v14H6V3Zm8 0v5h4M9 12h6m-6 4h6',
+  outros: 'M20 11.5a7 7 0 0 1-7 7H5l1.8-3A7 7 0 1 1 20 11.5ZM9 11.5h.01m3.5 0h.01m3.5 0h.01',
+};
 ---
 
 <BaseLayout title="Central de Ajuda">
-  <section class="store-hero" aria-labelledby="contact-title">
+  <section class="help-hero" aria-labelledby="contact-title">
     <div>
       <p class="eyebrow"><span class="signal" aria-hidden="true"></span> Central de Ajuda</p>
       <h1 class="display" id="contact-title">Como podemos ajudar?</h1>
@@ -22,11 +29,11 @@ import { storeSupport } from '../config/site';
     <section data-step="topics" aria-labelledby="help-topics">
       <h2 id="help-topics" tabindex="-1">Escolha um assunto</h2>
       <div class="help-topics">
-        {helpTopics.map((topic, index) => (
+        {helpTopics.map(topic => (
           <button type="button" class="help-choice" data-topic={topic.id}>
-            <span class="help-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
-            <span>{topic.title}</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+            <span class="help-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d={icons[topic.id]}/></svg></span>
+            <span class="help-choice-copy"><strong>{topic.title}</strong><small>{topic.summary}</small></span>
+            <svg class="help-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
           </button>
         ))}
       </div>
@@ -38,20 +45,29 @@ import { storeSupport } from '../config/site';
       <div class="help-issues" data-issues></div>
     </section>
 
+    <template id="help-issue-choice">
+      <button type="button" class="help-choice">
+        <span data-choice-label></span>
+        <svg class="help-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+      </button>
+    </template>
+
     <section data-step="guidance" class="help-panel" hidden aria-labelledby="help-guidance">
+      <p class="help-kicker">Orientação</p>
       <h2 id="help-guidance" tabindex="-1"></h2>
       <p class="help-muted" data-guidance></p>
-      <a class="text-link tap" data-resource hidden></a>
+      <a class="action help-resource" data-resource hidden><span data-resource-label></span><span aria-hidden="true" class="help-arrow">→</span></a>
       <div class="help-resolution">
         <p><strong>Essa orientação resolveu sua dúvida?</strong></p>
         <div class="help-actions">
           <button class="help-secondary" type="button" data-resolved>Sim, resolveu</button>
-          <button class="action" type="button" data-escalate>Ainda preciso de ajuda</button>
+          <button class="help-secondary help-escalate" type="button" data-escalate>Ainda preciso de ajuda</button>
         </div>
       </div>
     </section>
 
     <section data-step="form" class="help-panel" hidden aria-labelledby="help-form-title">
+      <p class="help-kicker">Atendimento por e-mail</p>
       <h2 id="help-form-title" tabindex="-1">Enviar solicitação</h2>
       <p class="help-muted" data-context></p>
       <form class="help-form">
@@ -89,6 +105,7 @@ import { storeSupport } from '../config/site';
   const element = <T extends HTMLElement>(selector: string) => flow.querySelector<T>(selector)!;
   const steps = [...flow.querySelectorAll<HTMLElement>('[data-step]')];
   const navigation = element('nav');
+  const issueTemplate = element<HTMLTemplateElement>('#help-issue-choice');
   const form = element<HTMLFormElement>('form');
   const feedback = element('[data-feedback]');
   const orderField = element('[data-order]');
@@ -103,6 +120,7 @@ import { storeSupport } from '../config/site';
     current = step;
     navigation.hidden = step === 'topics';
     element('[data-back]').hidden = step === 'done';
+    element('[data-reset]').hidden = step === 'issues';
     for (const panel of steps) {
       panel.hidden = panel.dataset.step !== step;
       if (!panel.hidden) panel.querySelector('h2')?.focus();
@@ -120,10 +138,8 @@ import { storeSupport } from '../config/site';
       topic = item;
       element('[data-topic-label]').textContent = item.title;
       element('[data-issues]').replaceChildren(...item.issues.map(choice => {
-        const button = document.createElement('button');
-        button.className = 'help-choice';
-        button.type = 'button';
-        button.textContent = choice.title;
+        const button = issueTemplate.content.querySelector('button')!.cloneNode(true) as HTMLButtonElement;
+        button.querySelector('[data-choice-label]')!.textContent = choice.title;
         button.addEventListener('click', () => {
           issue = choice;
           element('#help-guidance').textContent = choice.title;
@@ -131,7 +147,7 @@ import { storeSupport } from '../config/site';
           const resource = element<HTMLAnchorElement>('[data-resource]');
           resource.hidden = !choice.link;
           resource.href = choice.link ?? '';
-          resource.textContent = choice.label ?? '';
+          element('[data-resource-label]').textContent = choice.label ?? '';
           show('guidance');
         });
         return button;
@@ -190,21 +206,38 @@ import { storeSupport } from '../config/site';
 </script>
 
 <style>
-  .help-flow { max-width: 68rem; margin-block: clamp(1.25rem, 4vw, 2.5rem); }
-  .help-flow h2 { margin-bottom: .65rem; font-size: clamp(1.15rem, 3vw, 1.55rem); font-weight: 650; line-height: 1.2; }
-  .help-nav, .help-actions { display: flex; flex-wrap: wrap; gap: .55rem 1.2rem; margin-bottom: .85rem; }
-  .help-topics, .help-issues { display: grid; gap: .75rem; margin-top: 1rem; }
+  .help-hero, .help-flow { max-width: 62rem; margin-inline: auto; }
+  .help-hero { padding-block: clamp(.75rem, 3vw, 2rem) clamp(1.5rem, 4vw, 2.5rem); border-bottom: 1px solid var(--line); }
+  .help-hero .display { margin-block: .6rem; font-size: clamp(2.1rem, 4.5vw, 3.4rem); }
+  .help-flow { margin-block: clamp(1.15rem, 3vw, 2rem) clamp(2rem, 6vw, 4rem); }
+  .help-flow h2 { margin-bottom: .55rem; font-size: clamp(1.25rem, 3vw, 1.7rem); font-weight: 650; line-height: 1.2; letter-spacing: -.02em; }
+  .help-nav, .help-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem .75rem; }
+  .help-nav { margin-bottom: .9rem; font-size: .875rem; }
+  .help-nav [data-reset] { margin-left: auto; color: var(--muted); }
+  .help-nav [data-reset]:hover { color: var(--accent); }
+  .help-topics, .help-issues { display: grid; gap: .75rem; margin-top: .9rem; }
   .help-topics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .help-choice, .help-panel, .help-secondary { border: 1px solid var(--line); border-radius: .75rem; background: var(--surface); }
-  .help-choice { display: flex; align-items: center; gap: .85rem; width: 100%; min-height: 3.5rem; padding: 1rem; font-weight: 600; text-align: left; cursor: pointer; }
-  .help-choice:hover, .help-secondary:hover { border-color: var(--accent); }
-  .help-choice svg { flex: none; margin-left: auto; color: var(--accent); }
-  .help-number { color: var(--accent); font-size: .875rem; font-variant-numeric: tabular-nums; }
-  .help-panel { padding: clamp(1rem, 4vw, 2rem); }
+  .help-choice { display: flex; align-items: center; gap: .85rem; width: 100%; min-height: 3.5rem; padding: 1rem 1.15rem; font-weight: 600; text-align: left; cursor: pointer; }
+  .help-topics .help-choice { min-height: 6rem; }
+  .help-choice-copy { display: grid; gap: .25rem; min-width: 0; }
+  .help-choice-copy strong { font-weight: 650; line-height: 1.3; }
+  .help-choice-copy small { color: var(--muted); font-weight: 400; font-size: .85rem; line-height: 1.35; }
+  .help-icon { display: grid; place-items: center; flex: 0 0 2.5rem; height: 2.5rem; border-radius: .55rem; background: color-mix(in srgb, var(--accent) 9%, var(--surface)); color: var(--accent); }
+  .help-arrow { flex: none; margin-left: auto; }
+  .help-choice .help-arrow { color: var(--accent); }
+  .help-choice:focus-visible, .help-secondary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .help-choice:hover, .help-secondary:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+  .help-panel { padding: clamp(1.15rem, 4vw, 2.2rem); }
+  .help-kicker { margin-bottom: .45rem; color: var(--accent); font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .help-resource { margin-top: 1rem; gap: .7rem; }
+  .help-flow .action:hover { background: #e40b18; color: #fff; }
   .help-muted { max-width: 65ch; color: var(--muted); overflow-wrap: anywhere; }
-  .help-resolution, .help-urgent { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+  .help-resolution, .help-urgent { margin-top: 1.25rem; padding-top: 1.15rem; border-top: 1px solid var(--line); }
+  .help-resolution p { font-size: .925rem; }
   .help-actions { margin-top: .65rem; margin-bottom: 0; }
-  .help-secondary { min-height: 3rem; padding: .65rem 1rem; font-weight: 600; }
+  .help-secondary { min-height: 2.75rem; padding: .55rem .95rem; font-size: .9rem; font-weight: 600; }
+  .help-escalate { color: var(--accent); }
   .help-flow button { cursor: pointer; }
   .help-flow button:disabled { opacity: .55; cursor: wait; }
   .help-form { display: grid; justify-items: start; gap: .8rem; margin-block: 1.15rem; }
@@ -216,7 +249,16 @@ import { storeSupport } from '../config/site';
   .help-flow [hidden] { display: none; }
   @media (max-width: 40rem) { .help-topics { grid-template-columns: 1fr; } }
   @media (prefers-reduced-motion: no-preference) {
-    .help-flow [data-step]:not([hidden]) { animation: help-in .16s ease-out; }
-    @keyframes help-in { from { opacity: .65; } to { opacity: 1; } }
+    .help-choice, .help-secondary, .help-flow .action { transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+    .help-arrow, .help-icon svg { transition: transform .2s ease; }
+    .help-choice:is(:hover, :focus-visible) .help-arrow, .help-resource:is(:hover, :focus-visible) .help-arrow { transform: translateX(4px); }
+    .help-choice:is(:hover, :focus-visible) .help-icon svg { transform: translateY(-2px) rotate(-7deg); }
+    .help-choice:active, .help-secondary:active, .help-flow .action:active { transform: scale(.985); }
+    .help-flow [data-step]:not([hidden]) { animation: help-in .2s ease-out; }
+    @keyframes help-in { from { opacity: .72; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .help-choice:hover { transform: translateY(-2px); box-shadow: 0 5px 16px #15151512; }
+    .help-choice:active { transform: scale(.985); }
   }
 </style>
