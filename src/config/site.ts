@@ -1,3 +1,9 @@
+export const storeSupport = {
+  email: 'contato@marioserafim.com.br',
+  phone: '(85) 98186-6552',
+  whatsapp: `https://wa.me/5585981866552?text=${encodeURIComponent('olá quero ajuda com o meu produto')}`,
+} as const;
+
 export const site = {
   name: 'Mário Serafim Store',
   tagline: 'Produtos digitais',
@@ -26,5 +32,5 @@ export const site = {
       { label: 'Licenças', href: '/licencas/' },
     ],
   },
-  officialContact: 'https://marioserafim.com.br/contato/',
+  officialContact: '/contato/',
 } as const;

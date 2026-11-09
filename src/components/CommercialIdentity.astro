@@ -21,5 +21,5 @@ const contact = settings?.support_url || site.officialContact;
   ) : (
     <p>Dados cadastrais, endereço e e-mail comerciais aguardam preenchimento e validação do responsável antes da abertura comercial.</p>
   )}
-  <p><a class="text-link tap" href={contact} target="_blank" rel="noreferrer">Acessar o canal oficial de contato <span aria-hidden="true">↗</span></a></p>
+  <p><a class="text-link tap" href={contact} target={settings?.support_url ? '_blank' : undefined} rel={settings?.support_url ? 'noreferrer' : undefined}>Acessar o canal oficial de contato</a></p>
 </section>

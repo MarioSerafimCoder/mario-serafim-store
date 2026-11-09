@@ -100,7 +100,9 @@ test('rotas, validação e publicação do catálogo estático', async (t) => {
     assert.match(await read(page), /name="robots" content="noindex"/);
   }
   const contact = await read('contato/index.html');
-  assert.match(contact, /https:\/\/marioserafim\.com\.br\/contato\//);
+  assert.match(contact, /href="https:\/\/wa\.me\/5585981866552\?text=ol%C3%A1%20quero%20ajuda%20com%20o%20meu%20produto"/);
+  assert.match(contact, /href="mailto:contato@marioserafim\.com\.br"/);
+  assert.match(contact, /href="\/compras\/"[^>]*>Consultar meus pedidos/);
   assert.match(await read('entrega-digital/index.html'), /Como recebo meu produto\?/);
   assert.match(await read('entrega-digital/index.html'), /Posso usar o produto em projetos comerciais/);
   assert.match(await read('reembolsos/index.html'), /sete dias/);

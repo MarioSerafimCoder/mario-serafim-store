@@ -1,5 +1,5 @@
 ---
-import { site } from '../config/site';
+import { site, storeSupport } from '../config/site';
 import { getSettings, type Settings } from '../../worker/catalog';
 const year = new Date().getFullYear();
 const settings = Astro.locals.storeDB ? await getSettings(Astro.locals.storeDB) as Settings | null : null;
@@ -23,6 +23,8 @@ const officialContact = site.officialContact;
     <nav aria-label="Ajuda">
       <h2>Ajuda</h2>
       {site.footer.help.map((item) => <a href={item.href} class="tap">{item.label}</a>)}
+      <a href={storeSupport.whatsapp} class="tap">WhatsApp <span aria-hidden="true">↗</span></a>
+      <a href={`mailto:${storeSupport.email}`} class="tap footer-email">{storeSupport.email}</a>
     </nav>
     <nav aria-label="Informações legais">
       <h2>Informações legais</h2>
@@ -39,8 +41,12 @@ const officialContact = site.officialContact;
       ) : (
         <p class="identity-pending">Dados comerciais em atualização.</p>
       )}
-      <a class="tap" href={settings?.support_url || officialContact} target="_blank" rel="noreferrer">Canal oficial de contato <span aria-hidden="true">↗</span></a>
+      <a class="tap" href={settings?.support_url || officialContact} target={settings?.support_url ? '_blank' : undefined} rel={settings?.support_url ? 'noreferrer' : undefined}>Canal oficial de contato</a>
     </section>
   </div>
   <div class="shell footer-base"><p>© {year} Mário Serafim</p></div>
 </footer>
+
+<style>
+  .footer-email { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+</style>

@@ -1,3 +1,4 @@
+import { storeSupport } from '../src/config/site.ts';
 import { hex, hmacKey } from './mercado-pago.ts';
 import type { Env, Order } from './types.ts';
 
@@ -76,8 +77,7 @@ async function message(env: Env, delivery: Delivery, items: Order[]) {
   }
   const intro = 'Seu pagamento foi confirmado e seus produtos digitais já estão disponíveis.';
   const thanks = 'Obrigado por comprar na Mário Serafim Store.';
-  const supportEmail = 'contato@marioserafim.com.br';
-  const whatsapp = `https://wa.me/5585981866552?text=${encodeURIComponent('olá quero ajuda com o meu produto')}`;
+  const { email: supportEmail, whatsapp } = storeSupport;
   const products = entries.map((item) => `
     <tr><td style="padding:0 0 10px">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>

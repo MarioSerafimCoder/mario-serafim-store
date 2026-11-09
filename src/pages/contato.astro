@@ -1,31 +1,49 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { site } from '../config/site';
-import { getSettings } from '../../worker/catalog';
-import type { Settings } from '../../worker/catalog';
-
-const settings = Astro.locals.storeDB ? await getSettings(Astro.locals.storeDB) as Settings | null : null;
-const contact = settings?.support_url || site.officialContact;
+import { storeSupport } from '../config/site';
 ---
 
 <BaseLayout title="Contato e suporte">
-  <article class="article page-intro">
-    <p class="eyebrow">Atendimento da loja</p>
-    <h1 class="display">Contato e suporte</h1>
-    <p class="lede">Use o canal oficial para dúvidas sobre produtos, pagamentos, arquivos, licenças e pedidos.</p>
+  <section class="store-hero" aria-labelledby="contact-title">
+    <div>
+      <p class="eyebrow"><span class="signal" aria-hidden="true"></span> Atendimento da loja</p>
+      <h1 class="display" id="contact-title">Contato e suporte</h1>
+      <p class="lede">Fale com a loja sobre produtos, pagamentos, downloads e licenças.</p>
+    </div>
+  </section>
 
-    <h2>Em que podemos ajudar</h2>
-    <ul>
-      <li>Dúvidas antes da compra e sobre a compatibilidade indicada.</li>
-      <li>Pedido ou pagamento que não aparece com o status esperado.</li>
-      <li>Recuperação de acesso ou falha no download.</li>
-      <li>Arquivo defeituoso ou diferente da descrição.</li>
-      <li>Interpretação da licença de um produto.</li>
-      <li>Cancelamento ou reembolso.</li>
-    </ul>
+  <section class="contact-channels" aria-label="Canais de atendimento">
+    <article class="contact-card">
+      <h2>WhatsApp</h2>
+      <p>Converse com o suporte da loja.</p>
+      <p class="contact-detail">{storeSupport.phone}</p>
+      <a class="action" href={storeSupport.whatsapp}>Chamar no WhatsApp <span aria-hidden="true">↗</span></a>
+    </article>
+    <article class="contact-card">
+      <h2>E-mail</h2>
+      <p>Escreva para o suporte com os detalhes da sua dúvida.</p>
+      <p class="contact-detail">{storeSupport.email}</p>
+      <a class="action" href={`mailto:${storeSupport.email}`}>Enviar e-mail <span aria-hidden="true">↗</span></a>
+    </article>
+  </section>
 
-    <p><a class="action" href={contact} target="_blank" rel="noreferrer">Abrir canal oficial de contato <span aria-hidden="true">↗</span></a></p>
-    <p>O link abre o canal público de contato do portfólio oficial. A loja não mantém um formulário próprio de atendimento nem publica prazo de resposta ainda não confirmado.</p>
-    <p>Ao pedir ajuda sobre uma compra, informe apenas os dados necessários para localizar o pedido. Não envie senha, dados completos de cartão ou código de recuperação em canais públicos.</p>
-  </article>
+  <section class="contact-card contact-order" aria-labelledby="order-help">
+    <div>
+      <h2 id="order-help">Já fez uma compra?</h2>
+      <p>Consulte o pagamento e acesse seus arquivos na página de pedidos. Se precisar de ajuda, informe o número do pedido ao suporte.</p>
+    </div>
+    <a class="text-link tap" href="/compras/">Consultar meus pedidos <span aria-hidden="true">→</span></a>
+  </section>
 </BaseLayout>
+
+<style>
+  .contact-channels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-block: clamp(1.25rem, 3vw, 2rem); }
+  .contact-card { display: grid; align-content: start; justify-items: start; gap: .65rem; min-width: 0; padding: clamp(1.15rem, 3vw, 1.8rem); background: var(--surface); border: 1px solid var(--line); border-radius: .85rem; }
+  .contact-card h2 { font-size: 1.25rem; font-weight: 650; line-height: 1.25; }
+  .contact-card p { max-width: 60ch; color: var(--muted); }
+  .contact-card .contact-detail { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+  .contact-card .action { margin-top: .35rem; }
+  .contact-order { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1.5rem; }
+  .contact-order h2 { margin-bottom: .4rem; }
+  @media (max-width: 42rem) { .contact-channels { grid-template-columns: minmax(0, 1fr); } }
+</style>
