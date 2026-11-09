@@ -74,7 +74,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   import { formatPrice } from '../../lib/format';
 
   type PurchaseItem = { id: string; title: string; sku?: string; image?: string; grant: string | null };
-  type Purchase = { id: string; title: string; status: string; createdAt?: number; totalCents?: number; items: PurchaseItem[] };
+  type Purchase = { id: string; title: string; status: string; deliveryState?: string; createdAt?: number; totalCents?: number; items: PurchaseItem[] };
   const order = document.querySelector<HTMLElement>('#purchase-order')!;
   const status = document.querySelector<HTMLElement>('#purchase-status')!;
   const detail = document.querySelector<HTMLElement>('#purchase-detail')!;
@@ -103,14 +103,23 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     review: ['Pedido em revisão', 'Aguarde a atualização do status.'],
   };
 
+  const deliveryMessages: Record<string, string> = {
+    pending: 'Estamos preparando o envio do seu produto para o e-mail informado.',
+    processing: 'Estamos preparando o envio do seu produto para o e-mail informado.',
+    accepted: 'O envio para o e-mail informado foi encaminhado. Confira também a pasta de spam.',
+    delivered: 'O produto foi enviado para o e-mail informado.',
+    failed: 'O envio por e-mail falhou. Você pode baixar os arquivos abaixo ou procurar o suporte.',
+  };
+
   function render(result: Purchase) {
     id.textContent = result.id;
     date.textContent = typeof result.createdAt === 'number' ? orderDate.format(result.createdAt * 1000) : '—';
     total.textContent = typeof result.totalCents === 'number' ? formatPrice(result.totalCents) : '—';
     const [heading, explanation] = messages[result.status] ?? ['Pedido em análise', 'Aguarde a atualização do status.'];
-    status.textContent = heading;
+    const deliveryMessage = result.status === 'approved' && result.deliveryState ? deliveryMessages[result.deliveryState] : undefined;
+    status.textContent = deliveryMessage ? 'Pagamento confirmado!' : heading;
     status.dataset.approved = String(result.status === 'approved');
-    detail.textContent = explanation;
+    detail.textContent = deliveryMessage ?? explanation;
     const lines: PurchaseItem[] = result.items.length ? result.items : [{ id: result.id, title: result.title, grant: null }];
     items.replaceChildren(...lines.map((item) => {
       const row = template.content.cloneNode(true) as DocumentFragment;

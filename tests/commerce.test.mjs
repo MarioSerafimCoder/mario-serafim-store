@@ -173,6 +173,12 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   const queuedRetry=queued.shift();
   assert.deepEqual(queuedRetry.message,{purchase_id:order.id});
   assert.equal(queuedRetry.options.delaySeconds,120);
+  db.prepare("UPDATE email_deliveries SET state='processing',next_attempt=?").run(Math.floor(Date.now()/1000)+300);
+  let leaseRetry;
+  await worker.queue({messages:[{body:queuedRetry.message,ack(){assert.fail('a entrega em processamento ainda precisa de retentativa');},retry(options){leaseRetry=options;}}]},env);
+  assert.ok(leaseRetry.delaySeconds > 0 && leaseRetry.delaySeconds <= 300);
+  assert.equal(deliveries.length,1);
+  db.prepare('UPDATE email_deliveries SET next_attempt=0').run();
   let acknowledged=false;
   await worker.queue({messages:[{body:queuedRetry.message,ack(){acknowledged=true;},retry(){assert.fail('não deve reagendar uma entrega aceita');}}]},env);
   assert.equal(acknowledged,true);
@@ -193,6 +199,7 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   assert.equal((await call(api+'/arquivo/'+order.id+'/'+expires+'.'+expired,{session:false})).status,403);
   const approved = await state();
   assert.equal(approved.status, 'approved');
+  assert.equal(approved.deliveryState, 'accepted');
   assert.equal(approved.totalCents, 1299);
   assert.ok(Number.isSafeInteger(approved.createdAt));
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM order_events WHERE kind = 'payment_status' AND status = 'approved'").get().n, 1);
@@ -211,6 +218,9 @@ test('checkout, confirmação e entrega com D1 e Mercado Pago simulados', async 
   assert.equal((await call(path,{session:false})).status,403);
   assert.equal(db.prepare('SELECT state FROM email_deliveries').get().state,'blocked');
   assert.equal((await call(api + '/download', { method: 'POST', body: file() })).status, 403);
+  assert.equal((await state()).status, 'refunded');
+  Object.assign(remote, { status: 'processing', status_detail: 'in_process', last_updated_date: '2026-11-06T10:05:00Z' });
+  await notify();
   assert.equal((await state()).status, 'refunded');
   Object.assign(remote, { status: 'processed', status_detail: 'accredited', last_updated_date: '2026-11-06T10:03:00Z' });
   await notify();

@@ -402,7 +402,7 @@ async function reconcile(env: Ready, order: Order, remoteId: string, dispatch = 
         status = ? OR (status IN ('created','pending') AND ? NOT IN ('created','pending'))
         OR (status = 'approved' AND ? IN ('review','canceled','refunded','disputed'))
       ))
-    ) AND (status NOT IN ('refunded','disputed') OR ? <> 'approved')
+    ) AND (status NOT IN ('refunded','disputed') OR ? IN ('refunded','disputed'))
   `).bind(status, payment, updated, now(), ...(dynamic ? [buyer] : []), order.id, order.remote_id, updated, updated, status, status, status, status).run();
   await afterPayment(env,order.id,status,dispatch);
   return dispatch || status === 'approved';
@@ -427,7 +427,7 @@ async function reconcileCart(env: Ready, cart: CheckoutCart, remoteId: string, d
     WHERE id=? AND remote_id=? AND (provider_updated<? OR (provider_updated=? AND (
       status=? OR (status IN ('created','pending') AND ? NOT IN ('created','pending')) OR
       (status='approved' AND ? IN ('review','canceled','refunded','disputed')))))
-      AND (status NOT IN ('refunded','disputed') OR ?<>'approved')
+      AND (status NOT IN ('refunded','disputed') OR ? IN ('refunded','disputed'))
   `).bind(status,payment,updated,now(),cart.id,cart.remote_id,updated,updated,status,status,status,status);
   const lineUpdate=env.DB.prepare(`UPDATE orders SET status=?,payment_id=COALESCE(?,payment_id)
     ${dynamic ? ',buyer_email=COALESCE(buyer_email,?)' : ''}
@@ -565,6 +565,10 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const expected = url.searchParams.get('pedido');
     const id = purchase.kind === 'cart' ? purchase.cart.id : purchase.order.id;
     if (expected && expected !== id) return error('Recupere a compra com seu código de acesso.', 401);
+    const status = purchase.kind === 'cart' ? purchase.cart.status : purchase.order.status;
+    const delivery = status === 'approved' && deliveryEnabled(env)
+      ? await env.DB.prepare('SELECT state FROM email_deliveries WHERE purchase_id=?').bind(id).first<{state:string}>()
+      : null;
     const expiry = now() + 300;
     if (purchase.kind === 'cart') {
       const { results } = await env.DB.prepare('SELECT id,title,sku,status FROM orders WHERE cart_id=? ORDER BY cart_position')
@@ -574,13 +578,13 @@ async function handle(request: Request, env: Env): Promise<Response> {
         id:item.id,title:item.title,sku:item.sku,image:images?.get(item.sku),grant:item.status==='approved'
           ? `${expiry}.${await signature(env.STORE_SESSION_SECRET,`download:${item.id}.${expiry}`)}` : null,
       })));
-      return json({id,title:items.map(({title})=>title).join(' · '),status:purchase.cart.status,
+      return json({id,title:items.map(({title})=>title).join(' · '),status,deliveryState:delivery?.state,
         createdAt:purchase.cart.created_at,totalCents:purchase.cart.total_cents,items});
     }
     const order = purchase.order;
     const images = await orderImages(env, [order.sku]).catch(() => undefined);
     const grant = order.status === 'approved' ? `${expiry}.${await signature(env.STORE_SESSION_SECRET, `download:${order.id}.${expiry}`)}` : null;
-    return json({ id: order.id, title: order.title, status: order.status, grant,
+    return json({ id: order.id, title: order.title, status, grant, deliveryState:delivery?.state,
       createdAt: order.created_at, totalCents: order.price_cents,
       items:[{id:order.id,title:order.title,sku:order.sku,image:images?.get(order.sku),grant}] });
   }
@@ -676,7 +680,7 @@ export default {
         if (delay) message.retry({delaySeconds:delay});
         else {
           const pending = await env.DB.prepare(`SELECT next_attempt FROM email_deliveries
-            WHERE purchase_id=? AND state='pending'`).bind(id).first<{next_attempt:number}>();
+            WHERE purchase_id=? AND state IN ('pending','processing')`).bind(id).first<{next_attempt:number}>();
           if (pending) message.retry({delaySeconds:Math.max(1,pending.next_attempt-now())});
           else message.ack();
         }

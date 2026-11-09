@@ -4,29 +4,46 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 ---
 
 <BaseLayout title="Carrinho de compras" noindex>
-  <a href="/produtos/" class="text-link tap back-link">← Voltar ao catálogo</a>
-  <div class="basket-layout">
-    <section class="basket-card" aria-labelledby="basket-heading">
+  <div class="basket-page">
+    <header class="basket-header">
+      <a href="/produtos/" class="text-link tap back-link"><span aria-hidden="true">←</span> Voltar ao catálogo</a>
       <h1 class="display" id="basket-heading" tabindex="-1">Carrinho de compras</h1>
-      <noscript><p>Ative o JavaScript para acessar seu carrinho.</p></noscript>
-      <p id="basket-empty" hidden>Seu carrinho está vazio. <a href="/produtos/" class="text-link">Explorar o catálogo</a></p>
-      <div id="basket-products" hidden>
-        <div class="basket-toolbar">
-          <button type="button" class="text-link tap" id="basket-select"></button>
-          <span>Preço</span>
+    </header>
+    <div class="basket-layout">
+      <section class="basket-card" aria-label="Produtos no carrinho">
+        <noscript><p>Ative o JavaScript para acessar seu carrinho.</p></noscript>
+        <div id="basket-empty" class="basket-empty" hidden>
+          <h2>Seu carrinho está vazio</h2>
+          <a href="/produtos/" class="text-link tap">Explorar o catálogo</a>
         </div>
-        <ul id="basket-items"></ul>
-      </div>
-    </section>
-    <aside class="basket-card basket-summary" id="basket-summary" aria-labelledby="basket-summary-heading" hidden>
-      <h2 id="basket-summary-heading">Resumo do pedido</h2>
-      <p class="basket-subtotal" aria-live="polite"><span id="basket-subtotal-label"></span><strong id="basket-total"></strong></p>
-      <DeliveryEmail id="basket-delivery-email" />
-      <button type="button" class="action" id="basket-checkout" disabled>Finalizar compra</button>
-      <p class="basket-note">Pagamento pelo Mercado Pago. A entrega ocorre após a confirmação.</p>
-      <p class="basket-note" id="basket-availability" role="status"></p>
-      <p class="basket-note" id="basket-status" role="status"></p>
-    </aside>
+        <div id="basket-products" hidden>
+          <div class="basket-toolbar">
+            <h2>Produtos</h2>
+            <button type="button" class="text-link tap" id="basket-select"></button>
+          </div>
+          <ul id="basket-items"></ul>
+        </div>
+      </section>
+      <aside class="basket-card basket-summary" id="basket-summary" aria-labelledby="basket-summary-heading" hidden>
+        <h2 id="basket-summary-heading">Resumo do pedido</h2>
+        <p class="basket-subtotal" aria-live="polite">
+          <span>Total <small id="basket-subtotal-label"></small></span>
+          <strong id="basket-total"></strong>
+        </p>
+        <DeliveryEmail id="basket-delivery-email" label="E-mail para receber os produtos" />
+        <div class="basket-payment">
+          <button type="button" class="action" id="basket-checkout" disabled>Finalizar compra</button>
+          <p class="basket-note basket-provider">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+              <rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2" />
+            </svg>
+            Pagamento via Mercado Pago
+          </p>
+        </div>
+        <p class="basket-note" id="basket-availability" role="status"></p>
+        <p class="basket-note" id="basket-status" role="status"></p>
+      </aside>
+    </div>
   </div>
 
   <template id="basket-row">
@@ -34,11 +51,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <input type="checkbox" data-select-item />
       <img class="basket-image" src="/marca/monograma.png" width="112" height="84" alt="" decoding="async" />
       <div class="basket-details">
-        <h2><a data-item-link></a></h2>
+        <h3><a data-item-link></a></h3>
         <p>Produto digital <span data-item-coupon></span></p>
+        <strong class="basket-price" data-item-price></strong>
         <button type="button" class="text-link tap" data-remove-item>Remover</button>
       </div>
-      <strong class="basket-price" data-item-price></strong>
     </li>
   </template>
 </BaseLayout>
@@ -75,7 +92,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     const checking = selected.length > 0 && !unavailable;
     const invalid = selected.some(({ sku }) => unavailable?.has(sku));
     selectAll.textContent = selected.length === cart.length ? 'Desmarcar todos' : 'Selecionar todos';
-    subtotal.textContent = `Subtotal (${productCount(selected.length)})`;
+    subtotal.textContent = productCount(selected.length);
     total.textContent = formatPrice(selected.reduce((sum, item) => sum + (item.expectedTotalCents ?? item.priceCents), 0));
     availability.textContent = checking ? 'Conferindo disponibilidade…' : invalid
       ? 'Um produto selecionado está indisponível ou teve o preço alterado. Desmarque-o ou abra a página do produto para conferir.'
@@ -186,35 +203,53 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 </script>
 
 <style>
-  .back-link { margin-bottom: .75rem; }
-  .basket-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 25%); gap: 1.25rem; align-items: start; }
-  .basket-card { min-width: 0; padding: clamp(1rem, 2.5vw, 1.75rem); background: var(--surface); border: 1px solid var(--line); border-radius: .65rem; }
-  .basket-card h1 { font-size: clamp(1.75rem, 3.5vw, 2.75rem); }
-  #basket-empty { margin-top: 1rem; }
-  .basket-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .5rem; color: var(--muted); font-size: .875rem; }
-  .basket-row { display: grid; grid-template-columns: auto clamp(4rem, 12vw, 7rem) minmax(0, 1fr) auto; align-items: start; gap: 1rem; padding-block: 1.2rem; border-top: 1px solid var(--line); }
-  .basket-row input { align-self: center; width: 1.2rem; height: 1.2rem; accent-color: var(--accent); cursor: pointer; }
+  .basket-page { max-width: 74rem; margin-inline: auto; }
+  .basket-header { margin-bottom: clamp(1.25rem, 3vw, 2rem); }
+  .back-link { margin-bottom: .5rem; color: var(--muted); font-size: .875rem; }
+  .basket-header h1 { font-size: clamp(2rem, 4vw, 3rem); }
+  .basket-layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(20rem, 30vw, 23rem); gap: clamp(1rem, 2.5vw, 2rem); align-items: start; }
+  .basket-card { min-width: 0; padding: clamp(1rem, 2.5vw, 1.65rem); background: var(--surface); border: 1px solid var(--line); border-radius: .85rem; }
+  .basket-card h2 { font-size: 1.125rem; font-weight: 650; line-height: 1.25; }
+  .basket-empty .text-link { margin-top: .375rem; }
+  .basket-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 .75rem; padding-bottom: .375rem; }
+  .basket-toolbar button { color: var(--muted); font-size: .875rem; }
+  .basket-row { display: grid; grid-template-columns: auto clamp(4rem, 9vw, 6rem) minmax(0, 1fr); align-items: center; gap: .875rem; padding-block: 1rem; border-top: 1px solid var(--line); }
+  .basket-row:last-child { padding-bottom: 0; }
+  .basket-row input { width: 1.25rem; height: 1.25rem; accent-color: var(--accent); cursor: pointer; }
   .basket-image { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; background: var(--mat); border-radius: .4rem; }
-  .basket-details { min-width: 0; overflow-wrap: anywhere; }
-  .basket-details h2 { font-weight: 650; }
-  .basket-details a:hover { text-decoration: underline; }
+  .basket-details { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .25rem .75rem; min-width: 0; overflow-wrap: anywhere; }
+  .basket-details h3 { font-size: 1rem; font-weight: 650; line-height: 1.3; }
+  .basket-details a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: .2em; }
+  .basket-details p, .basket-details button { grid-column: 1; }
+  .basket-details button { justify-self: start; }
   .basket-details p, .basket-details button, .basket-note { color: var(--muted); font-size: .875rem; }
+  .basket-page .text-link:hover { color: var(--accent); }
+  .basket-price { grid-column: 2; grid-row: 1; line-height: 1.3; }
   .basket-price, .basket-subtotal strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .basket-summary { position: sticky; top: 1rem; }
-  .basket-summary h2 { font-size: 1.1rem; font-weight: 650; }
-  .basket-subtotal { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem .75rem; margin-block: .9rem; }
+  .basket-summary:not([hidden]) { display: grid; gap: 1rem; position: sticky; top: 1rem; }
+  .basket-subtotal { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem .75rem; padding-block: .875rem; border-block: 1px solid var(--line); font-weight: 600; }
+  .basket-subtotal small { display: block; color: var(--muted); font-size: .8125rem; font-weight: 400; }
+  .basket-subtotal strong { font-size: 1.4rem; line-height: 1.2; letter-spacing: -.025em; }
+  .basket-summary :global([data-delivery-email]:not([hidden])) { gap: .5rem; }
+  .basket-summary :global([data-delivery-email] input) { min-height: 3rem; border-radius: .5rem; }
+  .basket-summary :global([data-delivery-email] p) { line-height: 1.45; }
+  .basket-payment { display: grid; gap: .75rem; }
   .basket-summary .action { width: 100%; justify-content: center; }
+  .basket-summary .action:enabled:hover { background: #e40b18; color: #fff; }
+  .basket-summary .action:disabled { background: var(--ink); }
   .basket-summary button:disabled { opacity: .55; }
   button:enabled { cursor: pointer; }
-  .basket-note { margin-top: .75rem; }
+  .basket-provider { display: flex; align-items: center; justify-content: center; gap: .375rem; text-align: center; }
+  .basket-provider svg { flex: none; }
   .basket-note:empty { display: none; }
-  @media (max-width: 48rem) {
+  @media (max-width: 52rem) {
     .basket-layout { grid-template-columns: minmax(0, 1fr); }
-    .basket-summary { position: static; }
+    .basket-summary:not([hidden]) { position: static; }
   }
-  @media (max-width: 33rem) {
-    .basket-row { grid-template-columns: auto 3.5rem minmax(0, 1fr); gap: .25rem .65rem; }
-    .basket-price { grid-column: 3; }
-    .basket-toolbar > span { display: none; }
+  @media (max-width: 36rem) {
+    .basket-row { grid-template-columns: auto 3.5rem minmax(0, 1fr); align-items: start; gap: .625rem; }
+    .basket-row input { margin-top: .25rem; }
+    .basket-details { grid-template-columns: minmax(0, 1fr); }
+    .basket-price { grid-column: 1; grid-row: auto; }
   }
 </style>

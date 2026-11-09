@@ -76,13 +76,43 @@ async function message(env: Env, delivery: Delivery, items: Order[]) {
   }
   const intro = 'Seu pagamento foi confirmado e seus produtos digitais já estão disponíveis.';
   const thanks = 'Obrigado por comprar na Mário Serafim Store.';
-  const support = `${env.STORE_ORIGIN}/contato/`;
+  const supportEmail = 'contato@marioserafim.com.br';
+  const whatsapp = `https://wa.me/5585981866552?text=${encodeURIComponent('olá quero ajuda com o meu produto')}`;
+  const products = entries.map((item) => `
+    <tr><td style="padding:0 0 10px">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>
+    <td width="48" align="center" valign="middle" bgcolor="#85191d" style="color:#fff;font: bold 11px Arial,sans-serif;letter-spacing:1px">${item.filename ? escape(item.filename.split('.').pop()!.toUpperCase()) : 'ARQ'}</td>
+    <td bgcolor="#f5f2f1" style="padding:16px;overflow-wrap:anywhere">
+      <p style="margin:0 0 8px;font-weight:bold">${escape(item.title)}</p>
+      ${item.url
+        ? `<a style="display:inline-block;padding:10px 16px;border-radius:6px;background:#e40b18;color:#ffffff;font-weight:bold;text-decoration:none" href="${escape(item.url)}">Baixar arquivo</a>`
+        : `<p style="margin:0;color:#4d4645;font-size:14px;overflow-wrap:anywhere">Disponível no anexo deste e-mail<br>${escape(item.filename!)}</p>`}
+    </td></tr></table></td></tr>`).join('');
   return {
     from: env.STORE_EMAIL_FROM,
     to: [delivery.email],
     subject: 'Sua compra está pronta | Mário Serafim Store',
-    text: `Olá!\n\n${intro}\n\nPedido: ${delivery.purchase_id}\nProdutos adquiridos:\n${entries.map(item => `- ${item.title}: ${item.url ?? 'Anexo ' + item.filename}`).join('\n')}\n\n${thanks}\nPrecisa de ajuda? ${support}\n\nMário Serafim Store`,
-    html: `<div lang="pt-BR" style="max-width:560px;margin:auto;padding:24px;background:#fff;color:#181818;font:16px/1.55 Arial,sans-serif"><h1 style="font-size:22px;border-top:3px solid #ad2429;padding-top:16px">Sua compra está pronta</h1><p>Olá!</p><p>${intro}</p><p><strong>Pedido:</strong> ${escape(delivery.purchase_id)}</p><p><strong>Produtos adquiridos:</strong></p><ul>${entries.map(item => `<li>${escape(item.title)} · ${item.url ? `<a style="color:#ad2429" href="${escape(item.url)}">Baixar arquivo</a>` : `Anexo: ${escape(item.filename!)}`}</li>`).join('')}</ul><p>${thanks}</p><p>Precisa de ajuda? <a href="${escape(support)}">Fale com o suporte</a>.</p><p>Mário Serafim Store</p></div>`,
+    text: `Olá!\n\n${intro}\n\nPedido: ${delivery.purchase_id}\nProdutos adquiridos:\n${entries.map(item => `- ${item.title}: ${item.url ?? 'Anexo ' + item.filename}`).join('\n')}\n\n${thanks}\nPrecisa de ajuda? Falar com o suporte.\nWhatsApp: ${whatsapp}\nE-mail: ${supportEmail}\n\nMário Serafim Store`,
+    html: `<div lang="pt-BR" style="padding:20px 12px;background:#f7f5f4;color:#191515;font:16px/1.5 Arial,sans-serif">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e7e1df;border-top:4px solid #e40b18">
+        <tr><td bgcolor="#191515" style="padding:20px 24px">
+          <img src="${escape(`${env.STORE_ORIGIN}/marca/logo-email.png`)}" width="220" alt="Mário Serafim Store" style="display:block;width:220px;max-width:100%;height:auto;color:#ffffff;font:bold 14px Arial,sans-serif">
+        </td></tr>
+        <tr><td style="padding:28px 24px">
+          <p style="margin:0 0 8px;color:#85191d;font-size:12px;font-weight:bold;letter-spacing:1.2px">✓ &nbsp; PAGAMENTO CONFIRMADO</p>
+          <h1 style="margin:0 0 10px;font-size:32px;line-height:1.15;letter-spacing:-.6px">Sua compra está pronta</h1>
+          <p style="margin:0 0 24px;color:#4d4645">Seus arquivos estão disponíveis abaixo.</p>
+          <h2 style="margin:0 0 12px;font-size:18px">Produtos da compra</h2>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0">${products}</table>
+          <p style="margin:10px 0 0;padding-top:16px;border-top:1px solid #e7e1df;color:#4d4645;font-size:13px;overflow-wrap:anywhere"><strong>Pedido</strong><br>${escape(delivery.purchase_id)}</p>
+        </td></tr>
+        <tr><td bgcolor="#f0ecea" style="padding:16px 24px;color:#4d4645;font-size:14px">
+          <p style="margin:0 0 8px"><strong>Precisa de ajuda?</strong></p>
+          <p style="margin:0 0 4px"><a style="color:#85191d;font-weight:bold;text-decoration:underline" href="${escape(whatsapp)}">Falar com o suporte pelo WhatsApp</a></p>
+          <p style="margin:0"><a style="color:#85191d;text-decoration:underline" href="mailto:${supportEmail}">${supportEmail}</a></p>
+        </td></tr>
+      </table>
+    </div>`,
     attachments,
   };
 }
@@ -115,7 +145,7 @@ export async function sendDelivery(env: Env, id: string): Promise<number | null>
     if (!await db.prepare(`SELECT 1 FROM email_deliveries WHERE purchase_id=? AND state='processing'
       AND generation=? AND attempts=? AND ${approved}`).bind(id,job.generation,job.attempts).first()) return null;
     const response = await fetch('https://api.resend.com/emails', {
-      method:'POST', redirect:'error', signal:AbortSignal.timeout(10_000),
+      method:'POST', redirect:'manual', signal:AbortSignal.timeout(10_000),
       headers: { authorization:`Bearer ${env.RESEND_API_KEY}`, 'content-type':'application/json',
         'idempotency-key':`store-delivery/${id}/${job.generation}` },
       body: JSON.stringify(payload),
@@ -139,6 +169,7 @@ export async function sendDelivery(env: Env, id: string): Promise<number | null>
 }
 
 export async function dispatchDelivery(env: Env, id: string) {
+  if (!deliveryEnabled(env) || !deliveryConfigured(env)) return;
   const delay = await sendDelivery(env,id);
   if (delay) {
     await env.EMAIL_DELIVERY_QUEUE!.send({purchase_id:id},{delaySeconds:delay});
